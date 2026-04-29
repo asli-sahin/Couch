@@ -1,10 +1,10 @@
 {
-  "extName": { "message": "Synclify - Смотрите синхронно с друзьями" },
+  "extName": { "message": "Couch - Смотрите синхронно с друзьями" },
   "extDescription": {
     "message": "Создавайте совместный просмотр прямо в браузере: работает везде и без рекламы."
   },
-  "popupTitle": { "message": "Synclify" },
-  "optionsTitle": { "message": "Настройки Synclify" },
+  "popupTitle": { "message": "Couch" },
+  "optionsTitle": { "message": "Настройки Couch" },
   "anonymousNickname": { "message": "Аноним" },
   "clickToCopy": { "message": "Нажмите, чтобы скопировать" },
   "copied": { "message": "Скопировано" },
@@ -54,7 +54,7 @@
   "reactionsDescription": { "message": "Показывать панель реакций с эмодзи" },
   "customPlayer": { "message": "Собственный плеер" },
   "customPlayerDescription": {
-    "message": "Заменить стандартные элементы управления интерфейсом Synclify"
+    "message": "Заменить стандартные элементы управления интерфейсом Couch"
   },
   "saveSettings": { "message": "Сохранить настройки" },
   "chooseVideoToSync": { "message": "Выберите видео для синхронизации" },
@@ -64,9 +64,9 @@
   },
   "nativeUi": { "message": "Стандартный интерфейс" },
   "switchToSynclifyVideoPlayer": {
-    "message": "Переключиться на видеоплеер Synclify"
+    "message": "Переключиться на видеоплеер Couch"
   },
-  "synclifyUi": { "message": "Интерфейс Synclify" },
+  "synclifyUi": { "message": "Интерфейс Couch" },
   "typeMessage": { "message": "Введите сообщение..." },
   "participants": { "message": "Участники" },
   "host": { "message": "Хост" },

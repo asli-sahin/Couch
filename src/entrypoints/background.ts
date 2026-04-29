@@ -1,6 +1,6 @@
 import { defineBackground } from "wxt/utils/define-background"
 import browser from "webextension-polyfill"
-import { SOCKET_URL, SOCKET_EVENTS } from "~/types/socket"
+import { SOCKET_URL, SOCKET_EVENTS, type ControlMode } from "~/types/socket"
 import { MESSAGE_STATUS, MESSAGE_TYPE } from "~/types/messaging"
 import type { MessageKey } from "~/lib/i18n"
 import type { State } from "~/types/state"
@@ -19,6 +19,15 @@ const TOP_FRAME_SUPPORT_SCRIPTS = [
 
 const ALL_FRAME_SUPPORT_SCRIPTS = ["autoInject.js"]
 const AUTO_ENABLE_DEBUG_SHIELD = false
+const DEBUG_INJECT_FLOW = true
+const SOCKET_FETCH_HEADERS = {
+  "ngrok-skip-browser-warning": "true"
+}
+
+function logInjectDebug(source: string, extra?: Record<string, unknown>) {
+  if (!DEBUG_INJECT_FLOW) return
+  console.log(`[couch][inject-debug] ${source}`, extra ?? {})
+}
 
 function toOriginPattern(url?: string): string | null {
   if (!url) return null
@@ -405,7 +414,7 @@ export default defineBackground(async () => {
         ) as HTMLSourceElement | null
         const src = video.currentSrc || video.src || sourceChild?.src || ""
 
-        /* Decide whether Synclify should show its own player controls.
+        /* Decide whether Couch should show its own player controls.
            On known streaming sites, always false (their UI is better). */
         let needsCustomPlayer = false
         if (detectedSite === "unknown") {
@@ -618,7 +627,9 @@ export default defineBackground(async () => {
   }
 
   async function handleCreateRoom(): Promise<string> {
-    const res = await fetch(`${SOCKET_URL}/create`)
+    const res = await fetch(`${SOCKET_URL}/create`, {
+      headers: SOCKET_FETCH_HEADERS
+    })
     const code = await res.text()
     if (!res.ok) {
       const e = new Error(
@@ -659,22 +670,104 @@ export default defineBackground(async () => {
     frameIds: number[]
     videoId: string
     needsCustomPlayer?: boolean
+    tabId?: number
+    roomId?: string
+    nickname?: string
+    controlMode?: ControlMode
+    participantId?: string
   }) {
     const wait = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms))
+    const sendInitToFrame = async (
+      targetTabId: number,
+      frameId: number,
+      payload: {
+        type: MESSAGE_TYPE
+        videoId: string | null
+        roomId?: string
+        nickname?: string
+        controlMode?: ControlMode
+        participantId?: string
+      }
+    ) => {
+      try {
+        return await browser.tabs.sendMessage(targetTabId, payload, { frameId })
+      } catch {
+        return null
+      }
+    }
 
-    const tabs = await browser.tabs.query({
-      active: true,
-      currentWindow: true
-    })
-    const tabId = tabs[0].id
+    const providedTabId = body?.tabId
+    const tabs = providedTabId
+      ? [await browser.tabs.get(providedTabId)]
+      : await browser.tabs.query({
+          active: true,
+          currentWindow: true
+        })
+    const tabId = tabs[0]?.id
     if (!tabId) throw new Error("Tab id is undefined")
+    logInjectDebug("handleInject.start", {
+      tabId,
+      providedTabId,
+      body
+    })
+
+    const activeTabUrl = tabs[0].url ?? ""
+    const isInjectableUrl = /^https?:\/\//.test(activeTabUrl)
+    logInjectDebug("handleInject.tab", { tabId, activeTabUrl, isInjectableUrl })
+    if (!isInjectableUrl) {
+      const storageResult = await browser.storage.local.get("state")
+      const tabState = (storageResult.state as State | undefined)?.[tabId]
+      const roomId = tabState?.roomId
+      let fallbackUrl = "https://example.com/"
+
+      if (roomId) {
+        try {
+          const response = await fetch(
+            `${SOCKET_URL}/room/${encodeURIComponent(roomId)}/url`,
+            {
+              headers: SOCKET_FETCH_HEADERS
+            }
+          )
+          if (response.ok) {
+            const json = (await response.json()) as { url?: string }
+            if (
+              json.url &&
+              (json.url.startsWith("http://") || json.url.startsWith("https://"))
+            ) {
+              fallbackUrl = json.url
+            }
+          }
+        } catch {
+          // Keep default fallback when room host URL is unavailable.
+        }
+      }
+      logInjectDebug("handleInject.nonInjectable.redirect", {
+        tabId,
+        roomId,
+        fallbackUrl
+      })
+
+      await browser.tabs.update(tabId, { url: fallbackUrl })
+      await new Promise<void>((resolve) => {
+        const onUpdated = (
+          updatedTabId: number,
+          changeInfo: browser.Tabs.OnUpdatedChangeInfoType
+        ) => {
+          if (updatedTabId !== tabId || changeInfo.status !== "complete") return
+          browser.tabs.onUpdated.removeListener(onUpdated)
+          resolve()
+        }
+        browser.tabs.onUpdated.addListener(onUpdated)
+      })
+    }
 
     await injectSupportScripts(tabId)
 
     let frameIds = body ? body.frameIds : null
     let videoId: string | null = null
     let needsCustomPlayer = true
+    let noVideoFallback = false
 
     if (!frameIds) {
       let videos: Array<Video & { frameId: number }> = []
@@ -701,6 +794,17 @@ export default defineBackground(async () => {
         if (videos.length === 0 && attempt < 2) {
           await wait(700)
         }
+        logInjectDebug("handleInject.videoProbe", {
+          tabId,
+          attempt,
+          foundCount: videos.length,
+          videos: videos.map((video) => ({
+            frameId: video.frameId,
+            id: video.id,
+            streamingSite: video.streamingSite,
+            src: video.src?.slice(0, 120)
+          }))
+        })
       }
 
       if (videos.length > 1) {
@@ -716,34 +820,128 @@ export default defineBackground(async () => {
         frameIds = [videos[0].frameId]
         videoId = videos[0].id
         needsCustomPlayer = videos[0].needsCustomPlayer
+        logInjectDebug("handleInject.singleVideo", {
+          tabId,
+          frameId: frameIds[0],
+          videoId
+        })
       } else {
-        return null
+        // No detectable video yet. Inject in all frames and let whichever frame
+        // can resolve a real video handle INIT first (important for iframe players).
+        noVideoFallback = true
+        videoId = ""
+        needsCustomPlayer = false
+        logInjectDebug("handleInject.noVideoFallback", { tabId })
       }
     }
 
     // Inject the unlisted content script into desired frames
-    await browser.scripting.executeScript({
-      files: ["injected.js"],
-      target: { tabId: tabId, frameIds: frameIds }
-    })
+    if (noVideoFallback) {
+      await browser.scripting.executeScript({
+        files: ["injected.js"],
+        target: { tabId: tabId, allFrames: true }
+      })
+    } else {
+      await browser.scripting.executeScript({
+        files: ["injected.js"],
+        target: { tabId: tabId, frameIds: frameIds }
+      })
+    }
 
     const initPayload = {
       type: MESSAGE_TYPE.INIT,
-      videoId: body ? body.videoId : videoId
+      videoId: body ? body.videoId : videoId,
+      roomId: body?.roomId,
+      nickname: body?.nickname,
+      controlMode: body?.controlMode,
+      participantId: body?.participantId
     }
     let initSucceeded = false
     let initResponse: unknown = null
-    for (let attempt = 0; attempt < 4 && !initSucceeded; attempt++) {
-      try {
-        initResponse = await browser.tabs.sendMessage(tabId, initPayload, {
-          frameId: frameIds[0]
-        })
-        initSucceeded = true
-      } catch {
-        await wait(150)
+    if (!noVideoFallback) {
+      for (let attempt = 0; attempt < 4 && !initSucceeded; attempt++) {
+        try {
+          initResponse = await browser.tabs.sendMessage(tabId, initPayload, {
+            frameId: frameIds[0]
+          })
+          initSucceeded = true
+          logInjectDebug("handleInject.init.targeted.success", {
+            tabId,
+            frameId: frameIds[0],
+            response: initResponse as Record<string, unknown>
+          })
+        } catch {
+          logInjectDebug("handleInject.init.targeted.retry", {
+            tabId,
+            frameId: frameIds[0],
+            attempt
+          })
+          await wait(150)
+        }
+      }
+    }
+    if (!initSucceeded && noVideoFallback) {
+      const frameProbe = await browser.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: () => true
+      })
+
+      for (const frame of frameProbe) {
+        const response = await sendInitToFrame(
+          tabId,
+          frame.frameId,
+          initPayload as {
+            type: MESSAGE_TYPE
+            videoId: string | null
+            roomId?: string
+            nickname?: string
+            controlMode?: ControlMode
+            participantId?: string
+          }
+        )
+        if (
+          response &&
+          ((response as { status?: MESSAGE_STATUS }).status ===
+            MESSAGE_STATUS.SUCCESS ||
+            (response as { status?: MESSAGE_STATUS }).status ===
+              MESSAGE_STATUS.MULTIPLE_VIDEOS)
+        ) {
+          initResponse = response
+          initSucceeded = true
+          logInjectDebug("handleInject.init.frameProbe.success", {
+            tabId,
+            frameId: frame.frameId,
+            response: response as Record<string, unknown>
+          })
+          break
+        } else {
+          logInjectDebug("handleInject.init.frameProbe.noSuccess", {
+            tabId,
+            frameId: frame.frameId,
+            response: response as Record<string, unknown> | null
+          })
+        }
+      }
+    }
+    // Fallback: some iframe-heavy pages may reject targeted frame messaging
+    // even though injected script exists in another frame.
+    if (!initSucceeded) {
+      for (let attempt = 0; attempt < 3 && !initSucceeded; attempt++) {
+        try {
+          initResponse = await browser.tabs.sendMessage(tabId, initPayload)
+          initSucceeded = true
+          logInjectDebug("handleInject.init.broadcast.success", {
+            tabId,
+            response: initResponse as Record<string, unknown>
+          })
+        } catch {
+          logInjectDebug("handleInject.init.broadcast.retry", { tabId, attempt })
+          await wait(150)
+        }
       }
     }
     if (!initSucceeded) {
+      logInjectDebug("handleInject.init.failed", { tabId, initPayload })
       return {
         status: MESSAGE_STATUS.ERROR,
         messageKey: "injectedScriptNotReadyRetrySync"
@@ -873,7 +1071,42 @@ export default defineBackground(async () => {
         )
       if (videos.length === 0 && attempt < 2) await wait(700)
     }
-    if (videos.length === 0) return
+    if (videos.length === 0) {
+      await browser.scripting.executeScript({
+        files: ["injected.js"],
+        target: { tabId, allFrames: true }
+      })
+
+      const initPayload = {
+        type: MESSAGE_TYPE.INIT,
+        videoId: ""
+      }
+      const wait150 = (ms: number) =>
+        new Promise((resolve) => setTimeout(resolve, ms))
+      const frameProbe = await browser.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: () => true
+      })
+      for (let attempt = 0; attempt < 3; attempt++) {
+        for (const frame of frameProbe) {
+          try {
+            const response = (await browser.tabs.sendMessage(tabId, initPayload, {
+              frameId: frame.frameId
+            })) as { status?: MESSAGE_STATUS } | null
+            if (
+              response?.status === MESSAGE_STATUS.SUCCESS ||
+              response?.status === MESSAGE_STATUS.MULTIPLE_VIDEOS
+            ) {
+              return
+            }
+          } catch {
+            // Try next frame/attempt.
+          }
+        }
+        await wait150(150)
+      }
+      return
+    }
 
     const frameIds = [videos[0].frameId]
     const videoId = videos[0].id
@@ -906,6 +1139,16 @@ export default defineBackground(async () => {
         await wait150(150)
       }
     }
+
+    // Fallback for pages where targeted frame messaging is unreliable.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await browser.tabs.sendMessage(tabId, initPayload)
+        return
+      } catch {
+        await wait150(150)
+      }
+    }
   }
 
   bg.synclifyDebug = {
@@ -919,7 +1162,16 @@ export default defineBackground(async () => {
   browser.runtime.onMessage.addListener((message, sender) => {
     switch (message.action) {
       case "getTabId":
-        return handleGetTabId()
+        return sender.tab?.id ?? handleGetTabId()
+      case "getTabUrl": {
+        const requestedTabId =
+          typeof message.tabId === "number" ? message.tabId : sender.tab?.id
+        if (!requestedTabId) return sender.tab?.url
+        return browser.tabs
+          .get(requestedTabId)
+          .then((tab) => tab.url)
+          .catch(() => sender.tab?.url)
+      }
       case "createRoom":
         return handleCreateRoom()
       case "shouldInject":

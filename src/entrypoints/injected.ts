@@ -32,6 +32,8 @@ export default defineUnlistedScript(async () => {
   const TRACKED_MULTI_PARTICIPANT_ROOMS_STORAGE_KEY =
     "tracked_multi_participant_rooms"
   const MAX_TRACKED_MULTI_PARTICIPANT_ROOMS = 200
+  const ROOM_URL_SYNC_REQUEST = "__COUCH_ROOM_URL_REQUEST__"
+  const ROOM_URL_SYNC_PREFIX = "__COUCH_ROOM_URL__:"
 
   function logRoomDebug(
     source: string,
@@ -79,6 +81,8 @@ export default defineUnlistedScript(async () => {
   let connectRequestedByJoin = false
   let isExitingRoom = false
   let settings: { syncAudio: boolean } | undefined
+  let canonicalPageUrl: string | undefined
+  let videoNotFoundToastShown = false
   const SYNTHETIC_SUPPRESSION_MS = 400
   const suppressOutboundEvents = () => {
     suppressEventsUntil = Date.now() + SYNTHETIC_SUPPRESSION_MS
@@ -223,12 +227,138 @@ export default defineUnlistedScript(async () => {
     })
   }
 
+  const resolveCanonicalPageUrl = async () => {
+    try {
+      const tabUrl = await browser.runtime.sendMessage({
+        action: "getTabUrl",
+        tabId
+      })
+      if (
+        typeof tabUrl === "string" &&
+        (tabUrl.startsWith("http://") || tabUrl.startsWith("https://"))
+      ) {
+        canonicalPageUrl = tabUrl
+        return tabUrl
+      }
+    } catch {
+      // Fallback to current frame URL below.
+    }
+
+    const frameUrl = window.location.href
+    if (frameUrl.startsWith("http://") || frameUrl.startsWith("https://")) {
+      canonicalPageUrl = frameUrl
+      return frameUrl
+    }
+    return undefined
+  }
+
+  const emitRoomUrlSync = () => {
+    if (!roomCode) return
+
+    const currentUrl = canonicalPageUrl ?? window.location.href
+    if (!currentUrl.startsWith("http://") && !currentUrl.startsWith("https://")) {
+      logRoomDebug("urlSync.emit.skip.invalidUrl", {
+        extra: {
+          currentUrl
+        }
+      })
+      return
+    }
+
+    const nickname = state?.[tabId]?.nickname || "Host"
+    const payload: ChatMessage = {
+      nickname,
+      text: `${ROOM_URL_SYNC_PREFIX}${currentUrl}`,
+      timestamp: Date.now()
+    }
+
+    logRoomDebug("urlSync.emit", {
+      extra: {
+        currentUrl
+      }
+    })
+    console.log("[couch-url-sync] emit", {
+      roomCode,
+      currentUrl
+    })
+    socket.emit(SOCKET_EVENTS.CHAT_MESSAGE, roomCode, payload)
+  }
+
+  const emitRoomUrlSyncRequest = () => {
+    if (!roomCode) return
+    const nickname = state?.[tabId]?.nickname || "Anonymous"
+    const payload: ChatMessage = {
+      nickname,
+      text: ROOM_URL_SYNC_REQUEST,
+      timestamp: Date.now()
+    }
+    logRoomDebug("urlSync.request.emit")
+    console.log("[couch-url-sync] request.emit", {
+      roomCode
+    })
+    socket.emit(SOCKET_EVENTS.CHAT_MESSAGE, roomCode, payload)
+  }
+
+  const handleIncomingRoomUrlSync = (message: ChatMessage) => {
+    if (!message.text.startsWith(ROOM_URL_SYNC_PREFIX)) return false
+
+    const targetUrl = message.text.slice(ROOM_URL_SYNC_PREFIX.length).trim()
+    if (
+      !targetUrl ||
+      (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://"))
+    ) {
+      logRoomDebug("urlSync.receive.skip.invalidTarget", {
+        extra: {
+          targetUrl
+        }
+      })
+      return true
+    }
+
+    const isHost = state?.[tabId]?.isHost ?? false
+    if (isHost) {
+      logRoomDebug("urlSync.receive.skip.host", {
+        extra: {
+          targetUrl
+        }
+      })
+      return true
+    }
+    if (targetUrl === window.location.href) {
+      logRoomDebug("urlSync.receive.skip.sameUrl", {
+        extra: {
+          targetUrl
+        }
+      })
+      return true
+    }
+
+    logRoomDebug("urlSync.receive.navigate", {
+      extra: {
+        from: window.location.href,
+        to: targetUrl
+      }
+    })
+    console.log("[couch-url-sync] receive.navigate", {
+      from: window.location.href,
+      to: targetUrl
+    })
+    window.location.href = targetUrl
+    return true
+  }
+
   const socket = io(SOCKET_URL, {
     autoConnect: false,
     transports: ["websocket", "polling"]
   })
 
-  const init = async (videoId: string) => {
+  const init = async (
+    videoId: string,
+    roomIdOverride?: string,
+    nicknameOverride?: string,
+    controlModeOverride?: ControlMode,
+    participantIdOverride?: string
+  ) => {
     if (pendingInitPromise) {
       return pendingInitPromise
     }
@@ -245,7 +375,9 @@ export default defineUnlistedScript(async () => {
 
     const settingsResult = await browser.storage.sync.get("settings")
     settings = settingsResult.settings as { syncAudio: boolean } | undefined
-    roomCode = state[tabId]?.roomId
+    await resolveCanonicalPageUrl()
+    const nextRoomCode = roomIdOverride || state[tabId]?.roomId
+    roomCode = nextRoomCode
     logRoomDebug("init", {
       roomId: roomCode,
       participantId: state?.[tabId]?.participantId,
@@ -263,12 +395,28 @@ export default defineUnlistedScript(async () => {
       }
     }
 
+    if (
+      roomIdOverride ||
+      nicknameOverride ||
+      controlModeOverride ||
+      participantIdOverride
+    ) {
+      await updateTabState({
+        roomId: roomCode,
+        nickname: nicknameOverride ?? state?.[tabId]?.nickname,
+        controlMode: controlModeOverride ?? state?.[tabId]?.controlMode,
+        participantId: participantIdOverride ?? state?.[tabId]?.participantId
+      })
+    }
+
     await ensureParticipantId()
 
-    const videoResult = getVideo(videoId)
-    if (videoResult.status !== MESSAGE_STATUS.SUCCESS) return videoResult
+    const joinResult = await joinRoom()
+    if (joinResult.status !== MESSAGE_STATUS.SUCCESS) return joinResult
 
-    return joinRoom()
+    // Join first so URL handoff can work even when the client starts on a page
+    // without a detectable video (e.g. blank/new tab/homepage).
+    return getVideo(videoId)
     })()
 
     try {
@@ -340,6 +488,7 @@ export default defineUnlistedScript(async () => {
     }
 
     if (video != null) {
+      videoNotFoundToastShown = false
       updateTabState({
         roomId: roomCode,
         videoFound: true
@@ -363,10 +512,13 @@ export default defineUnlistedScript(async () => {
       return { status: MESSAGE_STATUS.SUCCESS }
     }
     observer.observe(document, { subtree: true, childList: true })
-    browser.runtime.sendMessage({
-      action: "showToast",
-      body: { error: true, content: "", messageKey: "videoNotFound" }
-    })
+    if (!videoNotFoundToastShown) {
+      videoNotFoundToastShown = true
+      browser.runtime.sendMessage({
+        action: "showToast",
+        body: { error: true, content: "", messageKey: "videoNotFound" }
+      })
+    }
     posthog.capture("no_video_found", {
       message: `No video found in ${window.location.href}`
     })
@@ -429,7 +581,8 @@ export default defineUnlistedScript(async () => {
       roomId: roomCode,
       nickname,
       participantId,
-      controlMode
+      controlMode,
+      pageUrl: await resolveCanonicalPageUrl()
     }
     logRoomDebug("joinRoom.emit", {
       roomId: roomCode,
@@ -458,6 +611,10 @@ export default defineUnlistedScript(async () => {
           })
           cleanup()
           await applyRoomState(nextRoomState)
+          const isLocalHost = nextRoomState.hostId === participantId
+          if (!isLocalHost) {
+            emitRoomUrlSyncRequest()
+          }
           resolve({ status: MESSAGE_STATUS.SUCCESS })
         }
 
@@ -539,6 +696,11 @@ export default defineUnlistedScript(async () => {
 
   socket.on(SOCKET_EVENTS.ROOM_UPDATED, (nextRoomState: RoomState) => {
     if (nextRoomState.roomId !== roomCode) return
+    const previousParticipantCount =
+      activeRoomState?.participantCount ?? state?.[tabId]?.participantCount ?? 0
+    const localParticipantId = state?.[tabId]?.participantId
+    const isLocalHost =
+      !!localParticipantId && nextRoomState.hostId === localParticipantId
     logRoomDebug("roomUpdated", {
       roomId: nextRoomState.roomId,
       participantId: state?.[tabId]?.participantId,
@@ -551,6 +713,14 @@ export default defineUnlistedScript(async () => {
     applyRoomState(nextRoomState).catch((error) => {
       posthog.captureException(error as Error)
     })
+
+    if (
+      isLocalHost &&
+      nextRoomState.participantCount > 1 &&
+      nextRoomState.participantCount >= previousParticipantCount
+    ) {
+      emitRoomUrlSync()
+    }
   })
 
   socket.on("connect_error", () => {
@@ -562,6 +732,23 @@ export default defineUnlistedScript(async () => {
 
   // --- Chat message handling ---
   socket.on(SOCKET_EVENTS.CHAT_MESSAGE, (message: ChatMessage) => {
+    if (message.text === ROOM_URL_SYNC_REQUEST) {
+      const localParticipantId = state?.[tabId]?.participantId
+      const isLocalHost =
+        !!localParticipantId && activeRoomState?.hostId === localParticipantId
+      logRoomDebug("urlSync.request.receive", {
+        extra: {
+          isLocalHost
+        }
+      })
+      console.log("[couch-url-sync] request.receive", {
+        roomCode,
+        isLocalHost
+      })
+      if (isLocalHost) emitRoomUrlSync()
+      return
+    }
+    if (handleIncomingRoomUrlSync(message)) return
     // Forward to chat content script via background relay
     browser.runtime.sendMessage({
       action: "forwardToChat",
@@ -696,7 +883,13 @@ export default defineUnlistedScript(async () => {
     ) => {
       switch (request.type) {
         case MESSAGE_TYPE.INIT: {
-          return init(request.videoId).then((res) => {
+          return init(
+            request.videoId,
+            request.roomId,
+            request.nickname,
+            request.controlMode,
+            request.participantId
+          ).then((res) => {
             return res
           })
         }

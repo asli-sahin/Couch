@@ -1,5 +1,5 @@
 /* -------------------------------------------------------------------
- *  Site-aware video detection for Synclify
+ *  Site-aware video detection for Couch
  *
  *  Provides two main capabilities:
  *  1. Detecting which streaming service the current page belongs to
@@ -284,7 +284,7 @@ function isPlayableVideo(video: HTMLVideoElement): boolean {
 
 /* ------------------------------------------------------------------
  *  Commercial player selectors (superset used by the custom-player
- *  overlay to decide whether to show Synclify's own controls)
+ *  overlay to decide whether to show Couch's own controls)
  *
  *  Includes all known streaming site containers plus generic
  *  commercial video player wrappers.
@@ -322,7 +322,7 @@ export const COMMERCIAL_PLAYER_SELECTORS = [
 ]
 
 /* ------------------------------------------------------------------
- *  Determine whether Synclify should show its custom player controls
+ *  Determine whether Couch should show its custom player controls
  *  over a given video element.
  *
  *  On known streaming sites this always returns false (their own UI

@@ -1,4 +1,5 @@
 import type { MessageKey } from "~/lib/i18n"
+import type { ControlMode } from "~/types/socket"
 
 export type ChatMessage = {
   nickname: string
@@ -9,6 +10,10 @@ export type ChatMessage = {
 export type ExtMessage = {
   type: MESSAGE_TYPE
   videoId: string
+  roomId?: string
+  nickname?: string
+  controlMode?: ControlMode
+  participantId?: string
 }
 
 export type ExtResponse = {

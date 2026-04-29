@@ -202,10 +202,10 @@ function App() {
         {/* Footer */}
         <div className="animate-fade-in stagger-3 mt-10 text-center">
           <a
-            href="https://synclify.party"
+            href="https://couch.party"
             target="about:blank"
             className="text-[11px] text-muted-foreground transition-colors hover:text-[hsl(38_92%_55%)]">
-            synclify.party
+            couch.party
           </a>
         </div>
       </div>

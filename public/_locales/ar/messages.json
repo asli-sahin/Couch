@@ -1,10 +1,10 @@
 {
-  "extName": { "message": "Synclify - شاهد بالمزامنة مع أصدقائك" },
+  "extName": { "message": "Couch - شاهد بالمزامنة مع أصدقائك" },
   "extDescription": {
     "message": "أنشئ مشاهدة جماعية مباشرة من المتصفح، تعمل تقريبًا في أي مكان وبدون إعلانات."
   },
-  "popupTitle": { "message": "Synclify" },
-  "optionsTitle": { "message": "إعدادات Synclify" },
+  "popupTitle": { "message": "Couch" },
+  "optionsTitle": { "message": "إعدادات Couch" },
   "anonymousNickname": { "message": "مجهول" },
   "clickToCopy": { "message": "انقر للنسخ" },
   "copied": { "message": "تم النسخ" },
@@ -50,7 +50,7 @@
   },
   "customPlayer": { "message": "مشغل مخصص" },
   "customPlayerDescription": {
-    "message": "استبدال عناصر التحكم الأصلية بواجهة Synclify"
+    "message": "استبدال عناصر التحكم الأصلية بواجهة Couch"
   },
   "saveSettings": { "message": "حفظ الإعدادات" },
   "chooseVideoToSync": { "message": "اختر فيديو للمزامنة" },
@@ -60,9 +60,9 @@
   },
   "nativeUi": { "message": "الواجهة الأصلية" },
   "switchToSynclifyVideoPlayer": {
-    "message": "التبديل إلى مشغل فيديو Synclify"
+    "message": "التبديل إلى مشغل فيديو Couch"
   },
-  "synclifyUi": { "message": "واجهة Synclify" },
+  "synclifyUi": { "message": "واجهة Couch" },
   "typeMessage": { "message": "اكتب رسالة..." },
   "participants": { "message": "المشاركون" },
   "host": { "message": "المضيف" },

@@ -1,10 +1,10 @@
 {
-  "extName": { "message": "Synclify - Watch in sync with your friends" },
+  "extName": { "message": "Couch - Watch in sync with your friends" },
   "extDescription": {
     "message": "Create a watch party straight from your browser - works anywhere, ad-free."
   },
-  "popupTitle": { "message": "Synclify" },
-  "optionsTitle": { "message": "Synclify Settings" },
+  "popupTitle": { "message": "Couch" },
+  "optionsTitle": { "message": "Couch Settings" },
   "anonymousNickname": { "message": "Anonymous" },
   "clickToCopy": { "message": "Click to copy" },
   "copied": { "message": "Copied!" },
@@ -50,7 +50,7 @@
   "reactionsDescription": { "message": "Show the emoji reaction bar" },
   "customPlayer": { "message": "Custom player" },
   "customPlayerDescription": {
-    "message": "Replace native video controls with Synclify UI"
+    "message": "Replace native video controls with Couch UI"
   },
   "saveSettings": { "message": "Save Settings" },
   "chooseVideoToSync": { "message": "Choose a video to sync" },
@@ -60,9 +60,9 @@
   },
   "nativeUi": { "message": "Native UI" },
   "switchToSynclifyVideoPlayer": {
-    "message": "Switch to Synclify video player"
+    "message": "Switch to Couch video player"
   },
-  "synclifyUi": { "message": "Synclify UI" },
+  "synclifyUi": { "message": "Couch UI" },
   "typeMessage": { "message": "Type a message..." },
   "participants": { "message": "Participants" },
   "host": { "message": "Host" },

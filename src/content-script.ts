@@ -70,7 +70,7 @@ const bootstrap = () => {
       return getVideo(videoId)
     }
   }
-  // console.log("Synclify: loaded")
+  // console.log("Couch: loaded")
 
   const videoEventHandler = (event: Event) => {
     if (roomCode) {

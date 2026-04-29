@@ -24,6 +24,7 @@ export type JoinRoomPayload = {
   nickname: string
   participantId: string
   controlMode?: ControlMode
+  pageUrl?: string
 }
 
 export type LeaveRoomPayload = {

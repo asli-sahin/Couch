@@ -1,10 +1,10 @@
 {
-  "extName": { "message": "Synclify - अपने दोस्तों के साथ सिंक में देखें" },
+  "extName": { "message": "Couch - अपने दोस्तों के साथ सिंक में देखें" },
   "extDescription": {
     "message": "अपने ब्राउज़र से सीधे वॉच पार्टी बनाएं, लगभग हर जगह काम करता है और बिना विज्ञापनों के।"
   },
-  "popupTitle": { "message": "Synclify" },
-  "optionsTitle": { "message": "Synclify सेटिंग्स" },
+  "popupTitle": { "message": "Couch" },
+  "optionsTitle": { "message": "Couch सेटिंग्स" },
   "anonymousNickname": { "message": "गुमनाम" },
   "clickToCopy": { "message": "कॉपी करने के लिए क्लिक करें" },
   "copied": { "message": "कॉपी हो गया" },
@@ -50,7 +50,7 @@
   "reactionsDescription": { "message": "इमोजी रिएक्शन बार दिखाएं" },
   "customPlayer": { "message": "कस्टम प्लेयर" },
   "customPlayerDescription": {
-    "message": "डिफॉल्ट वीडियो कंट्रोल्स की जगह Synclify UI इस्तेमाल करें"
+    "message": "डिफॉल्ट वीडियो कंट्रोल्स की जगह Couch UI इस्तेमाल करें"
   },
   "saveSettings": { "message": "सेटिंग्स सेव करें" },
   "chooseVideoToSync": { "message": "सिंक करने के लिए एक वीडियो चुनें" },
@@ -60,9 +60,9 @@
   },
   "nativeUi": { "message": "डिफॉल्ट UI" },
   "switchToSynclifyVideoPlayer": {
-    "message": "Synclify वीडियो प्लेयर पर स्विच करें"
+    "message": "Couch वीडियो प्लेयर पर स्विच करें"
   },
-  "synclifyUi": { "message": "Synclify UI" },
+  "synclifyUi": { "message": "Couch UI" },
   "typeMessage": { "message": "संदेश लिखें..." },
   "participants": { "message": "प्रतिभागी" },
   "host": { "message": "होस्ट" },

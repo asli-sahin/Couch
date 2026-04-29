@@ -13,7 +13,6 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from "react"
 import type { State, TabState } from "~/types/state"
 import browser from "webextension-polyfill"
-import logo from "~/assets/logo.svg?raw"
 import { useForm } from "react-hook-form"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
@@ -161,12 +160,12 @@ function App() {
     }
   }, [currentTab, loadPopupState, logRoomDebug])
 
-  const setStoredState = useCallback((newState: State) => {
+  const setStoredState = useCallback(async (newState: State) => {
     logRoomDebug("setStoredState", {
       stateSnapshot: newState
     })
     setState(newState)
-    browser.storage.local.set({ state: newState })
+    await browser.storage.local.set({ state: newState })
   }, [logRoomDebug])
 
   const responseCallback = useCallback((response: ExtResponse) => {
@@ -200,26 +199,49 @@ function App() {
   }, [])
 
   const roomCallback = useCallback(
-    (roomId: string) => {
+    async (roomId: string) => {
       const nick = nickname.trim() || t("anonymousNickname")
       const participantId =
         state?.[currentTab]?.participantId || crypto.randomUUID()
       const controlMode: ControlMode =
         state?.[currentTab]?.controlMode ?? (sharedMode ? "shared" : "host")
-      browser.storage.local.set({ nickname: nick })
+      await browser.storage.local.set({ nickname: nick })
+      const previousTabState = state?.[currentTab]
       const newState = Object.assign({}, state ?? {}, {
         [currentTab]: {
           ...state?.[currentTab],
-          roomId: roomId,
+          roomId,
           participantId,
           controlMode,
           nickname: nick
         }
       })
-      setStoredState(newState)
-      browser.runtime
-        .sendMessage({ action: "inject" })
-        .then((response: ExtResponse) => responseCallback(response))
+      await setStoredState(newState)
+
+      const rollbackState = Object.assign({}, newState)
+      if (previousTabState) {
+        rollbackState[currentTab] = previousTabState
+      } else {
+        delete rollbackState[currentTab]
+      }
+
+      return browser.runtime
+        .sendMessage({
+          action: "inject",
+          body: {
+            tabId: currentTab,
+            roomId,
+            nickname: nick,
+            participantId,
+            controlMode
+          }
+        })
+        .then(async (response: ExtResponse) => {
+          responseCallback(response)
+          if (!response || response.status !== MESSAGE_STATUS.SUCCESS) {
+            await setStoredState(rollbackState)
+          }
+        })
     },
     [currentTab, responseCallback, state, setStoredState, nickname, sharedMode]
   )
@@ -344,10 +366,9 @@ function App() {
 
       {/* Header */}
       <div className="animate-fade-in-up relative z-10 px-5 pb-3 pt-5">
-        <div
-          dangerouslySetInnerHTML={{ __html: logo }}
-          className="mx-auto w-36 opacity-90"
-        />
+        <h1 className="text-center text-3xl font-bold tracking-tight text-foreground">
+          Couch
+        </h1>
       </div>
 
       {/* Main content */}
@@ -751,7 +772,7 @@ function App() {
           {t("settings")}
         </button>
         <a
-          href="https://synclify.party"
+          href="https://couch.party"
           target="about:blank"
           className="text-[11px] text-muted-foreground transition-colors hover:text-[hsl(38_92%_55%)]">
           {t("website")}

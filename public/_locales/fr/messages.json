@@ -1,10 +1,10 @@
 {
-  "extName": { "message": "Synclify - Regardez en synchro avec vos amis" },
+  "extName": { "message": "Couch - Regardez en synchro avec vos amis" },
   "extDescription": {
     "message": "Créez une watch party directement depuis votre navigateur, sans pub et sur presque tous les sites."
   },
-  "popupTitle": { "message": "Synclify" },
-  "optionsTitle": { "message": "Paramètres de Synclify" },
+  "popupTitle": { "message": "Couch" },
+  "optionsTitle": { "message": "Paramètres de Couch" },
   "anonymousNickname": { "message": "Anonyme" },
   "clickToCopy": { "message": "Cliquer pour copier" },
   "copied": { "message": "Copié" },
@@ -60,7 +60,7 @@
   "reactionsDescription": { "message": "Afficher la barre de réactions emoji" },
   "customPlayer": { "message": "Lecteur personnalisé" },
   "customPlayerDescription": {
-    "message": "Remplacer les contrôles natifs par l'interface Synclify"
+    "message": "Remplacer les contrôles natifs par l'interface Couch"
   },
   "saveSettings": { "message": "Enregistrer les paramètres" },
   "chooseVideoToSync": { "message": "Choisissez une vidéo à synchroniser" },
@@ -70,9 +70,9 @@
   },
   "nativeUi": { "message": "Interface native" },
   "switchToSynclifyVideoPlayer": {
-    "message": "Passer au lecteur vidéo Synclify"
+    "message": "Passer au lecteur vidéo Couch"
   },
-  "synclifyUi": { "message": "Interface Synclify" },
+  "synclifyUi": { "message": "Interface Couch" },
   "typeMessage": { "message": "Tapez un message..." },
   "participants": { "message": "Participants" },
   "host": { "message": "Hôte" },
