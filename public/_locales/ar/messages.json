@@ -11,6 +11,9 @@
   "videoNotDetectedYet": { "message": "لم يتم اكتشاف الفيديو بعد" },
   "videoDetected": { "message": "تم اكتشاف الفيديو" },
   "videoNotFound": { "message": "لم يتم العثور على فيديو" },
+  "remotePlayMutedHint": {
+    "message": "Synced playback started muted — click the page or video for sound."
+  },
   "multipleVideosDetected": { "message": "تم اكتشاف عدة فيديوهات" },
   "injectedScriptNotReadyRetrySync": {
     "message": "البرنامج النصي المحقون غير جاهز بعد، حاول المزامنة مرة أخرى"

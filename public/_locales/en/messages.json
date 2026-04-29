@@ -11,6 +11,9 @@
   "videoNotDetectedYet": { "message": "Video not detected yet" },
   "videoDetected": { "message": "Video detected" },
   "videoNotFound": { "message": "Video not found" },
+  "remotePlayMutedHint": {
+    "message": "Synced playback started muted — click the page or video for sound."
+  },
   "multipleVideosDetected": { "message": "Multiple videos detected" },
   "injectedScriptNotReadyRetrySync": {
     "message": "Injected script not ready yet, retry sync"

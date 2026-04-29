@@ -667,8 +667,8 @@ export default defineBackground(async () => {
   }
 
   async function handleInject(body?: {
-    frameIds: number[]
-    videoId: string
+    frameIds?: number[]
+    videoId?: string
     needsCustomPlayer?: boolean
     tabId?: number
     roomId?: string
@@ -678,24 +678,6 @@ export default defineBackground(async () => {
   }) {
     const wait = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms))
-    const sendInitToFrame = async (
-      targetTabId: number,
-      frameId: number,
-      payload: {
-        type: MESSAGE_TYPE
-        videoId: string | null
-        roomId?: string
-        nickname?: string
-        controlMode?: ControlMode
-        participantId?: string
-      }
-    ) => {
-      try {
-        return await browser.tabs.sendMessage(targetTabId, payload, { frameId })
-      } catch {
-        return null
-      }
-    }
 
     const providedTabId = body?.tabId
     const tabs = providedTabId
@@ -764,14 +746,14 @@ export default defineBackground(async () => {
 
     await injectSupportScripts(tabId)
 
-    let frameIds = body ? body.frameIds : null
+    let frameIds = body?.frameIds ?? null
     let videoId: string | null = null
     let needsCustomPlayer = true
     let noVideoFallback = false
 
     if (!frameIds) {
       let videos: Array<Video & { frameId: number }> = []
-      for (let attempt = 0; attempt < 3 && videos.length === 0; attempt++) {
+      for (let attempt = 0; attempt < 6 && videos.length === 0; attempt++) {
         const result = await browser.scripting.executeScript({
           func: detectPageVideos,
           target: { tabId: tabId, allFrames: true }
@@ -791,8 +773,8 @@ export default defineBackground(async () => {
             })
           )
 
-        if (videos.length === 0 && attempt < 2) {
-          await wait(700)
+        if (videos.length === 0 && attempt < 5) {
+          await wait(750)
         }
         logInjectDebug("handleInject.videoProbe", {
           tabId,
@@ -826,31 +808,38 @@ export default defineBackground(async () => {
           videoId
         })
       } else {
-        // No detectable video yet. Inject in all frames and let whichever frame
-        // can resolve a real video handle INIT first (important for iframe players).
+        // No detectable video yet (SPA may mount late). Inject only the top frame:
+        // injecting into every iframe spawns duplicate sockets/participant joins and breaks
+        // host URL sync, connection state, and post-navigation recovery on YouTube.
         noVideoFallback = true
+        frameIds = [0]
         videoId = ""
         needsCustomPlayer = false
-        logInjectDebug("handleInject.noVideoFallback", { tabId })
+        logInjectDebug("handleInject.noVideoFallback", {
+          tabId,
+          primaryFrameId: frameIds[0]
+        })
       }
     }
 
-    // Inject the unlisted content script into desired frames
-    if (noVideoFallback) {
-      await browser.scripting.executeScript({
-        files: ["injected.js"],
-        target: { tabId: tabId, allFrames: true }
-      })
-    } else {
-      await browser.scripting.executeScript({
-        files: ["injected.js"],
-        target: { tabId: tabId, frameIds: frameIds }
-      })
+    if (!frameIds?.length) {
+      logInjectDebug("handleInject.missingFrameIds", { tabId })
+      return {
+        status: MESSAGE_STATUS.ERROR,
+        messageKey: "injectedScriptNotReadyRetrySync"
+      }
     }
 
+    // Inject the unlisted content script only into targeted frame(s).
+    await browser.scripting.executeScript({
+      files: ["injected.js"],
+      target: { tabId: tabId, frameIds: frameIds }
+    })
+
+    const resolvedVideoId = body?.videoId ?? videoId ?? ""
     const initPayload = {
       type: MESSAGE_TYPE.INIT,
-      videoId: body ? body.videoId : videoId,
+      videoId: resolvedVideoId,
       roomId: body?.roomId,
       nickname: body?.nickname,
       controlMode: body?.controlMode,
@@ -858,69 +847,28 @@ export default defineBackground(async () => {
     }
     let initSucceeded = false
     let initResponse: unknown = null
-    if (!noVideoFallback) {
-      for (let attempt = 0; attempt < 4 && !initSucceeded; attempt++) {
-        try {
-          initResponse = await browser.tabs.sendMessage(tabId, initPayload, {
-            frameId: frameIds[0]
-          })
-          initSucceeded = true
-          logInjectDebug("handleInject.init.targeted.success", {
-            tabId,
-            frameId: frameIds[0],
-            response: initResponse as Record<string, unknown>
-          })
-        } catch {
-          logInjectDebug("handleInject.init.targeted.retry", {
-            tabId,
-            frameId: frameIds[0],
-            attempt
-          })
-          await wait(150)
-        }
-      }
-    }
-    if (!initSucceeded && noVideoFallback) {
-      const frameProbe = await browser.scripting.executeScript({
-        target: { tabId, allFrames: true },
-        func: () => true
-      })
-
-      for (const frame of frameProbe) {
-        const response = await sendInitToFrame(
+    const primaryFrameId = frameIds[0]
+    for (let attempt = 0; attempt < 6 && !initSucceeded; attempt++) {
+      try {
+        initResponse = await browser.tabs.sendMessage(tabId, initPayload, {
+          frameId: primaryFrameId
+        })
+        initSucceeded = true
+        logInjectDebug("handleInject.init.targeted.success", {
           tabId,
-          frame.frameId,
-          initPayload as {
-            type: MESSAGE_TYPE
-            videoId: string | null
-            roomId?: string
-            nickname?: string
-            controlMode?: ControlMode
-            participantId?: string
-          }
-        )
-        if (
-          response &&
-          ((response as { status?: MESSAGE_STATUS }).status ===
-            MESSAGE_STATUS.SUCCESS ||
-            (response as { status?: MESSAGE_STATUS }).status ===
-              MESSAGE_STATUS.MULTIPLE_VIDEOS)
-        ) {
-          initResponse = response
-          initSucceeded = true
-          logInjectDebug("handleInject.init.frameProbe.success", {
-            tabId,
-            frameId: frame.frameId,
-            response: response as Record<string, unknown>
-          })
-          break
-        } else {
-          logInjectDebug("handleInject.init.frameProbe.noSuccess", {
-            tabId,
-            frameId: frame.frameId,
-            response: response as Record<string, unknown> | null
-          })
-        }
+          frameId: primaryFrameId,
+          noVideoFallback,
+          attempt,
+          response: initResponse as Record<string, unknown>
+        })
+      } catch {
+        logInjectDebug("handleInject.init.targeted.retry", {
+          tabId,
+          frameId: primaryFrameId,
+          noVideoFallback,
+          attempt
+        })
+        await wait(200)
       }
     }
     // Fallback: some iframe-heavy pages may reject targeted frame messaging
@@ -950,7 +898,7 @@ export default defineBackground(async () => {
 
     // Notify the video player content script to attach custom controls
     // Only show custom player for native videos not inside commercial players
-    const selectedVideoId = body ? body.videoId : videoId
+    const selectedVideoId = body?.videoId ?? videoId
     const showCustomPlayer = body
       ? (body.needsCustomPlayer ?? needsCustomPlayer)
       : needsCustomPlayer
@@ -1036,119 +984,77 @@ export default defineBackground(async () => {
     return null
   }
 
-  async function reinjectTab(tabId: number) {
+  /**
+   * After a full navigation (e.g. client URL-sync redirect), the injected script is gone.
+   * Re-run the same inject path used from the popup so INIT receives room credentials and we
+   * only inject once (no allFrames duplicate joins / ROOM_ERROR / clearTabState).
+   */
+  async function reinjectTab(tabId: number): Promise<void> {
     const wait = (ms: number) =>
-      new Promise((resolve) => setTimeout(resolve, ms))
+      new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-    await injectSupportScripts(tabId)
+    const snapshot = await browser.storage.local.get("state")
+    const persisted = snapshot.state as State | undefined
+    const tabState = persisted?.[tabId]
 
-    // Find a video in the tab's frames
-    let videos: Array<{
-      id: string
-      frameId: number
-      needsCustomPlayer: boolean
-    }> = []
-    for (let attempt = 0; attempt < 3 && videos.length === 0; attempt++) {
-      const result = await browser.scripting.executeScript({
-        func: detectPageVideos,
-        target: { tabId, allFrames: true }
-      })
-      videos = result
-        .filter(
-          (injection) =>
-            Array.isArray(injection.result) && injection.result.length !== 0
-        )
-        .flatMap((injection) =>
-          (
-            injection.result as Array<{
-              id: string
-              needsCustomPlayer: boolean
-            }>
-          ).map((v) => ({
-            ...v,
-            frameId: injection.frameId
-          }))
-        )
-      if (videos.length === 0 && attempt < 2) await wait(700)
+    if (!tabState?.roomId) {
+      logInjectDebug("reinjectTab.skip.noRoomInStorage", { tabId })
+      return
     }
-    if (videos.length === 0) {
-      await browser.scripting.executeScript({
-        files: ["injected.js"],
-        target: { tabId, allFrames: true }
-      })
-
-      const initPayload = {
-        type: MESSAGE_TYPE.INIT,
-        videoId: ""
-      }
-      const wait150 = (ms: number) =>
-        new Promise((resolve) => setTimeout(resolve, ms))
-      const frameProbe = await browser.scripting.executeScript({
-        target: { tabId, allFrames: true },
-        func: () => true
-      })
-      for (let attempt = 0; attempt < 3; attempt++) {
-        for (const frame of frameProbe) {
-          try {
-            const response = (await browser.tabs.sendMessage(tabId, initPayload, {
-              frameId: frame.frameId
-            })) as { status?: MESSAGE_STATUS } | null
-            if (
-              response?.status === MESSAGE_STATUS.SUCCESS ||
-              response?.status === MESSAGE_STATUS.MULTIPLE_VIDEOS
-            ) {
-              return
-            }
-          } catch {
-            // Try next frame/attempt.
-          }
-        }
-        await wait150(150)
-      }
+    // Join flow always assigns participantId before syncing; reconnect needs the same identity.
+    if (!tabState.participantId) {
+      logInjectDebug("reinjectTab.skip.noParticipantId", { tabId })
       return
     }
 
-    const frameIds = [videos[0].frameId]
-    const videoId = videos[0].id
-    const needsCustomPlayer = videos[0].needsCustomPlayer
+    let lastStatus: MESSAGE_STATUS | undefined
 
-    await browser.scripting.executeScript({
-      files: ["injected.js"],
-      target: { tabId, frameIds }
-    })
-
-    const initPayload = {
-      type: MESSAGE_TYPE.INIT,
-      videoId
-    }
-    const wait150 = (ms: number) =>
-      new Promise((resolve) => setTimeout(resolve, ms))
-    for (let attempt = 0; attempt < 4; attempt++) {
-      try {
-        await browser.tabs.sendMessage(tabId, initPayload, {
-          frameId: frameIds[0]
-        })
-        // Notify video player content script only for native videos
-        if (needsCustomPlayer) {
-          browser.tabs
-            .sendMessage(tabId, { to: "videoPlayer", videoId })
-            .catch(() => {})
-        }
-        return
-      } catch {
-        await wait150(150)
-      }
-    }
-
-    // Fallback for pages where targeted frame messaging is unreliable.
     for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await wait(520 * attempt)
+      }
       try {
-        await browser.tabs.sendMessage(tabId, initPayload)
-        return
-      } catch {
-        await wait150(150)
+        const response = await handleInject({
+          tabId,
+          roomId: tabState.roomId,
+          nickname: tabState.nickname,
+          participantId: tabState.participantId,
+          controlMode: tabState.controlMode
+        })
+
+        lastStatus =
+          (response as { status?: MESSAGE_STATUS } | undefined)?.status ??
+          MESSAGE_STATUS.SUCCESS
+
+        logInjectDebug("reinjectTab.attempt", {
+          tabId,
+          attempt,
+          status: lastStatus,
+          roomId: tabState.roomId
+        })
+
+        if (lastStatus !== MESSAGE_STATUS.ERROR) {
+          logInjectDebug("reinjectTab.complete", {
+            tabId,
+            roomId: tabState.roomId
+          })
+          return
+        }
+      } catch (error) {
+        logInjectDebug("reinjectTab.attempt.catch", {
+          tabId,
+          attempt,
+          error,
+          roomId: tabState.roomId
+        })
       }
     }
+
+    logInjectDebug("reinjectTab.exhaustedRetries", {
+      tabId,
+      roomId: tabState.roomId,
+      lastStatus
+    })
   }
 
   bg.synclifyDebug = {

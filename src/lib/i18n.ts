@@ -11,6 +11,7 @@ export const MESSAGE_KEYS = [
   "videoNotDetectedYet",
   "videoDetected",
   "videoNotFound",
+  "remotePlayMutedHint",
   "multipleVideosDetected",
   "injectedScriptNotReadyRetrySync",
   "roomCode",

@@ -11,6 +11,9 @@
   "videoNotDetectedYet": { "message": "এখনও ভিডিও শনাক্ত হয়নি" },
   "videoDetected": { "message": "ভিডিও শনাক্ত হয়েছে" },
   "videoNotFound": { "message": "ভিডিও পাওয়া যায়নি" },
+  "remotePlayMutedHint": {
+    "message": "Synced playback started muted — click the page or video for sound."
+  },
   "multipleVideosDetected": { "message": "একাধিক ভিডিও শনাক্ত হয়েছে" },
   "injectedScriptNotReadyRetrySync": {
     "message": "ইনজেক্ট করা স্ক্রিপ্ট এখনও প্রস্তুত নয়, আবার সিঙ্ক করার চেষ্টা করুন"

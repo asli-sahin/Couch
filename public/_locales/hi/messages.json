@@ -11,6 +11,9 @@
   "videoNotDetectedYet": { "message": "वीडियो अभी तक नहीं मिला" },
   "videoDetected": { "message": "वीडियो मिल गया" },
   "videoNotFound": { "message": "वीडियो नहीं मिला" },
+  "remotePlayMutedHint": {
+    "message": "Synced playback started muted — click the page or video for sound."
+  },
   "multipleVideosDetected": { "message": "एक से ज़्यादा वीडियो मिले" },
   "injectedScriptNotReadyRetrySync": {
     "message": "इंजेक्ट किया गया स्क्रिप्ट अभी तैयार नहीं है, फिर से सिंक करें"

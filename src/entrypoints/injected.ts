@@ -35,6 +35,29 @@ export default defineUnlistedScript(async () => {
   const ROOM_URL_SYNC_REQUEST = "__COUCH_ROOM_URL_REQUEST__"
   const ROOM_URL_SYNC_PREFIX = "__COUCH_ROOM_URL__:"
 
+  /** Treats query param order/spacing drift as identical (helps YouTube redirects). */
+  const urlsPlaybackEquivalent = (a: string, b: string): boolean => {
+    try {
+      const ua = new URL(a)
+      const ub = new URL(b)
+      if (ua.origin !== ub.origin) return false
+      const normalizePathname = (path: string) =>
+        path !== "/" ? path.replace(/\/$/, "") : "/"
+      if (normalizePathname(ua.pathname) !== normalizePathname(ub.pathname)) {
+        return false
+      }
+      const sa = [...new URLSearchParams(ua.search).entries()].sort(
+        (x, y) => x[0].localeCompare(y[0]) || x[1].localeCompare(y[1])
+      )
+      const sb = [...new URLSearchParams(ub.search).entries()].sort(
+        (x, y) => x[0].localeCompare(y[0]) || x[1].localeCompare(y[1])
+      )
+      return JSON.stringify(sa) === JSON.stringify(sb)
+    } catch {
+      return a === b
+    }
+  }
+
   function logRoomDebug(
     source: string,
     details?: {
@@ -83,7 +106,82 @@ export default defineUnlistedScript(async () => {
   let settings: { syncAudio: boolean } | undefined
   let canonicalPageUrl: string | undefined
   let videoNotFoundToastShown = false
+  let teardownRemotePlaybackGesture: (() => void) | null = null
   const SYNTHETIC_SUPPRESSION_MS = 400
+
+  const clearPlaybackGestureListeners = () => {
+    teardownRemotePlaybackGesture?.()
+    teardownRemotePlaybackGesture = null
+  }
+
+  const applyRemoteSyncedPlay = async (
+    media: HTMLVideoElement,
+    targetTimeSeconds: number
+  ) => {
+    suppressOutboundEvents()
+    media.currentTime = targetTimeSeconds
+    clearPlaybackGestureListeners()
+
+    const preferredMuted = media.muted
+
+    try {
+      await media.play()
+      return
+    } catch (e: unknown) {
+      const err = e as { name?: string }
+      if (err?.name !== "NotAllowedError") {
+        posthog.captureException(e instanceof Error ? e : new Error(String(e)))
+        return
+      }
+    }
+
+    media.muted = true
+    try {
+      await media.play()
+      browser.runtime.sendMessage({
+        action: "showToast",
+        body: {
+          error: false,
+          content: "",
+          messageKey: "remotePlayMutedHint"
+        }
+      })
+
+      const onGesture = () => {
+        clearPlaybackGestureListeners()
+        void (async () => {
+          media.muted = preferredMuted
+          try {
+            await media.play()
+          } catch {
+            /* User can still use site controls after a gesture */
+          }
+        })()
+      }
+
+      document.addEventListener("pointerdown", onGesture, true)
+      document.addEventListener("keydown", onGesture, true)
+      teardownRemotePlaybackGesture = () => {
+        document.removeEventListener("pointerdown", onGesture, true)
+        document.removeEventListener("keydown", onGesture, true)
+      }
+    } catch {
+      media.muted = preferredMuted
+
+      const onGestureOnce = () => {
+        clearPlaybackGestureListeners()
+        suppressOutboundEvents()
+        void media.play()
+      }
+
+      document.addEventListener("pointerdown", onGestureOnce, true)
+      document.addEventListener("keydown", onGestureOnce, true)
+      teardownRemotePlaybackGesture = () => {
+        document.removeEventListener("pointerdown", onGestureOnce, true)
+        document.removeEventListener("keydown", onGestureOnce, true)
+      }
+    }
+  }
   const suppressOutboundEvents = () => {
     suppressEventsUntil = Date.now() + SYNTHETIC_SUPPRESSION_MS
   }
@@ -324,10 +422,17 @@ export default defineUnlistedScript(async () => {
       })
       return true
     }
-    if (targetUrl === window.location.href) {
+
+    const here = window.location.href.startsWith("http")
+      ? window.location.href
+      : canonicalPageUrl && canonicalPageUrl.startsWith("http")
+        ? canonicalPageUrl
+        : window.location.href
+    if (urlsPlaybackEquivalent(targetUrl, here)) {
       logRoomDebug("urlSync.receive.skip.sameUrl", {
         extra: {
-          targetUrl
+          targetUrl,
+          here
         }
       })
       return true
@@ -512,20 +617,12 @@ export default defineUnlistedScript(async () => {
       return { status: MESSAGE_STATUS.SUCCESS }
     }
     observer.observe(document, { subtree: true, childList: true })
-    if (!videoNotFoundToastShown) {
-      videoNotFoundToastShown = true
-      browser.runtime.sendMessage({
-        action: "showToast",
-        body: { error: true, content: "", messageKey: "videoNotFound" }
-      })
-    }
-    posthog.capture("no_video_found", {
-      message: `No video found in ${window.location.href}`
+    posthog.capture("no_video_found_pending_observer", {
+      message: `No video element yet — observing DOM in ${window.location.href}`
     })
-    return {
-      status: MESSAGE_STATUS.ERROR,
-      messageKey: "videoNotFound"
-    }
+    // Room join already succeeded — return SUCCESS so the popup does NOT roll back storage
+    // while the MutationObserver attaches to the player (common on slow-mount sites).
+    return { status: MESSAGE_STATUS.SUCCESS }
   }
 
   const ensureSocketConnected = async () => {
@@ -806,9 +903,11 @@ export default defineUnlistedScript(async () => {
       serverTimestamp?: number
     ) => {
       if (video == null) {
-        const e = new Error("Video is null in socket video event handler")
-        posthog.captureException(e)
-        throw e
+        posthog.capture("socket_video_event_no_element", {
+          eventType,
+          note: "No video bound yet — likely early remote event."
+        })
+        return
       }
       const shouldTrackTimelineEvent =
         eventType === VIDEO_EVENTS.PLAY ||
@@ -830,24 +929,10 @@ export default defineUnlistedScript(async () => {
 
       switch (eventType) {
         case VIDEO_EVENTS.PLAY: {
-          suppressOutboundEvents()
-          const adjustedTime = adjustTime(Number.parseFloat(currentTime))
-          video.currentTime = adjustedTime
-          video.play().catch((e) => {
-            console.error(e)
-            if (e.name === "NotAllowedError") {
-              browser.runtime.sendMessage({
-                action: "showToast",
-                body: {
-                  error: true,
-                  content:
-                    "Video is not allowed to play! Interact with the page first."
-                }
-              })
-            } else {
-              posthog.captureException(e)
-            }
-          })
+          void applyRemoteSyncedPlay(
+            video,
+            adjustTime(Number.parseFloat(currentTime))
+          )
           break
         }
         case VIDEO_EVENTS.PAUSE:
@@ -895,6 +980,7 @@ export default defineUnlistedScript(async () => {
         }
         case MESSAGE_TYPE.EXIT:
           isExitingRoom = true
+          clearPlaybackGestureListeners()
           for (const event of Object.values(VIDEO_EVENTS)) {
             boundVideo?.removeEventListener(event, checkVideoEvent)
           }

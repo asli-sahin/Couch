@@ -11,6 +11,9 @@
   "videoNotDetectedYet": { "message": "ویڈیو ابھی تک نہیں ملی" },
   "videoDetected": { "message": "ویڈیو مل گئی" },
   "videoNotFound": { "message": "ویڈیو نہیں ملی" },
+  "remotePlayMutedHint": {
+    "message": "Synced playback started muted — click the page or video for sound."
+  },
   "multipleVideosDetected": { "message": "ایک سے زیادہ ویڈیوز ملیں" },
   "injectedScriptNotReadyRetrySync": {
     "message": "انجیکٹ کیا گیا اسکرپٹ ابھی تیار نہیں، دوبارہ ہم آہنگ کریں"

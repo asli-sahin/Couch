@@ -11,6 +11,9 @@
   "videoNotDetectedYet": { "message": "尚未检测到视频" },
   "videoDetected": { "message": "已检测到视频" },
   "videoNotFound": { "message": "未找到视频" },
+  "remotePlayMutedHint": {
+    "message": "Synced playback started muted — click the page or video for sound."
+  },
   "multipleVideosDetected": { "message": "检测到多个视频" },
   "injectedScriptNotReadyRetrySync": {
     "message": "注入脚本尚未准备好，请重试同步"
