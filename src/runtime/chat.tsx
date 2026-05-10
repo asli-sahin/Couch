@@ -362,6 +362,8 @@ function ChatApp() {
       {/* Chat window */}
       {open && (
         <div
+          onKeyDown={(e) => e.stopPropagation()}
+          onKeyUp={(e) => e.stopPropagation()}
           style={{
             position: "fixed",
             top: Math.max(
@@ -516,6 +518,7 @@ function ChatApp() {
               value={inputText}
               onChange={(e) => setInputText(e.currentTarget.value)}
               onKeyDown={(e) => {
+                e.stopPropagation()
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault()
                   sendMessage()
