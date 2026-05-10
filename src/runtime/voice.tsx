@@ -69,6 +69,41 @@ function VoiceApp() {
   const [dragging, setDragging] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
+  const [chatPanelOpen, setChatPanelOpen] = useState(false)
+  // Initialize to false — rely solely on fullscreenchange events to avoid
+  // a permanent hidden state when document.fullscreenElement is transiently
+  // non-null at injection time.
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Publish own open state so the chat panel knows we exist
+  useEffect(() => {
+    browser.storage.local.set({ voicePanelOpen: open }).catch(() => {})
+  }, [open])
+
+  // Hide UI when fullscreen, restore on exit
+  useEffect(() => {
+    const handler = () => {
+      const fs = !!document.fullscreenElement
+      setIsFullscreen(fs)
+      if (fs) setOpen(false)
+    }
+    document.addEventListener("fullscreenchange", handler)
+    return () => document.removeEventListener("fullscreenchange", handler)
+  }, [])
+
+  // Track whether the chat panel is open so we can stack above it
+  useEffect(() => {
+    browser.storage.local.get("chatPanelOpen").then((result) => {
+      setChatPanelOpen(!!result.chatPanelOpen)
+    })
+    const listener = (changes: Record<string, browser.Storage.StorageChange>) => {
+      if ("chatPanelOpen" in changes) {
+        setChatPanelOpen(!!changes.chatPanelOpen.newValue)
+      }
+    }
+    browser.storage.onChanged.addListener(listener)
+    return () => browser.storage.onChanged.removeListener(listener)
+  }, [])
 
   // --- Visibility: only show when in a room ---
   useEffect(() => {
@@ -110,13 +145,14 @@ function VoiceApp() {
       if (result.voiceBubblePos) {
         const saved = result.voiceBubblePos as { x: number; y: number }
         setBubblePos({
-          x: Math.max(EDGE_MARGIN, Math.min(saved.x, window.innerWidth - BUBBLE_SIZE - EDGE_MARGIN)),
+          x: Math.max(EDGE_MARGIN, Math.min(saved.x, document.documentElement.clientWidth - BUBBLE_SIZE - EDGE_MARGIN)),
           y: Math.max(EDGE_MARGIN, Math.min(saved.y, window.innerHeight - BUBBLE_SIZE - EDGE_MARGIN))
         })
       } else {
+        // Stack directly above the chat bubble (right edge, one bubble-height + gap above bottom)
         setBubblePos({
-          x: EDGE_MARGIN,
-          y: window.innerHeight - BUBBLE_SIZE - 80
+          x: document.documentElement.clientWidth - BUBBLE_SIZE - EDGE_MARGIN,
+          y: window.innerHeight - BUBBLE_SIZE * 2 - EDGE_MARGIN - 8
         })
       }
     })
@@ -130,7 +166,7 @@ function VoiceApp() {
     const onResize = () => {
       const oldW = prevSize.current.w
       const oldH = prevSize.current.h
-      const newW = window.innerWidth
+      const newW = document.documentElement.clientWidth
       const newH = window.innerHeight
       prevSize.current = { w: newW, h: newH }
       setBubblePos((prev) => {
@@ -646,7 +682,7 @@ function VoiceApp() {
     }
     if (dragStart.current.moved) {
       setBubblePos({
-        x: Math.max(EDGE_MARGIN, Math.min(window.innerWidth - BUBBLE_SIZE - EDGE_MARGIN, dragStart.current.bx + dx)),
+        x: Math.max(EDGE_MARGIN, Math.min(document.documentElement.clientWidth - BUBBLE_SIZE - EDGE_MARGIN, dragStart.current.bx + dx)),
         y: Math.max(EDGE_MARGIN, Math.min(window.innerHeight - BUBBLE_SIZE - EDGE_MARGIN, dragStart.current.by + dy))
       })
     }
@@ -658,7 +694,7 @@ function VoiceApp() {
       dragStart.current.moved = false
       const midX = window.innerWidth / 2
       const snappedX =
-        bubblePos.x + BUBBLE_SIZE / 2 < midX ? EDGE_MARGIN : window.innerWidth - BUBBLE_SIZE - EDGE_MARGIN
+        bubblePos.x + BUBBLE_SIZE / 2 < midX ? EDGE_MARGIN : document.documentElement.clientWidth - BUBBLE_SIZE - EDGE_MARGIN
       const finalPos = { x: snappedX, y: bubblePos.y }
       setBubblePos(finalPos)
       browser.storage.local.set({ voiceBubblePos: finalPos })
@@ -686,18 +722,27 @@ function VoiceApp() {
   const isSelfSpeaking = speakingIds.has(participantIdRef.current)
   const bubbleOnRight = bubblePos.x + BUBBLE_SIZE / 2 > window.innerWidth / 2
 
-  if (!visible || bubblePos.x < 0) return null
+  if (!visible || bubblePos.x < 0 || isFullscreen) return null
 
   const panelLeft = bubbleOnRight
     ? undefined
     : bubblePos.x + BUBBLE_SIZE + 8
+  // Constant right offset: bubble snaps to EDGE_MARGIN from the ICB right edge,
+  // so the panel is always BUBBLE_SIZE + EDGE_MARGIN + 8 px from the right.
+  // Avoids any clientWidth timing mismatch with the scrollbar.
   const panelRight = bubbleOnRight
-    ? window.innerWidth - bubblePos.x + 8
+    ? BUBBLE_SIZE + EDGE_MARGIN + 8
     : undefined
-  const panelTop = Math.max(
-    EDGE_MARGIN,
-    Math.min(bubblePos.y, window.innerHeight - 340 - EDGE_MARGIN)
-  )
+
+  // Always anchor the voice panel by its BOTTOM edge so it grows upward and is
+  // never clipped by the viewport regardless of how many participants are shown.
+  //   – Chat open  → bottom sits just above the chat panel
+  //   – Standalone → bottom sits at the viewport edge margin
+  const CHAT_PANEL_HEIGHT = 420
+  const PANEL_GAP = 8
+  const panelBottom = chatPanelOpen
+    ? EDGE_MARGIN + CHAT_PANEL_HEIGHT + PANEL_GAP   // 440px from bottom
+    : EDGE_MARGIN                                   // 12px from bottom
 
   return (
     <>
@@ -709,22 +754,30 @@ function VoiceApp() {
         onClick={handleBubbleClick}
         style={{
           position: "fixed",
-          left: bubblePos.x,
+          // Right side: use CSS 'right' so the bubble is always inside the ICB
+          // (content area, excluding scrollbar). While dragging we compute from
+          // clientWidth; when stable we use the constant EDGE_MARGIN to avoid
+          // any timing mismatch between bubblePos and the live clientWidth.
+          ...(bubbleOnRight
+            ? { right: dragging
+                ? document.documentElement.clientWidth - bubblePos.x - BUBBLE_SIZE
+                : EDGE_MARGIN }
+            : { left: bubblePos.x }),
           top: bubblePos.y,
           width: BUBBLE_SIZE,
           height: BUBBLE_SIZE,
           borderRadius: "50%",
-          background: inVoice ? "hsl(142, 71%, 45%)" : "hsl(220, 20%, 20%)",
+          background: inVoice ? "#D64992" : "#820043",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           cursor: connecting ? "wait" : "grab",
           zIndex: 2147483647,
           boxShadow: isSelfSpeaking && inVoice
-            ? "0 0 0 4px rgba(34,197,94,0.45), 0 4px 16px rgba(0,0,0,0.35)"
+            ? "0 0 0 4px rgba(214,73,146,0.45), 0 4px 16px rgba(214,73,146,0.25)"
             : inVoice
-              ? "0 0 0 2px rgba(34,197,94,0.3), 0 4px 16px rgba(0,0,0,0.35)"
-              : "0 4px 16px rgba(0,0,0,0.3)",
+              ? "0 0 0 2px rgba(214,73,146,0.3), 0 4px 16px rgba(214,73,146,0.15)"
+              : "0 4px 16px rgba(130,0,67,0.45)",
           transition: dragging ? "none" : "left 0.2s ease, box-shadow 0.15s",
           touchAction: "none",
           userSelect: "none",
@@ -740,7 +793,7 @@ function VoiceApp() {
             <line x1="8" y1="23" x2="16" y2="23" />
           </svg>
         ) : (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={inVoice ? "hsl(220,20%,6%)" : "rgba(255,255,255,0.85)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.92)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
             <path d="M19 10v2a7 7 0 01-14 0v-2" />
             <line x1="12" y1="19" x2="12" y2="23" />
@@ -754,19 +807,19 @@ function VoiceApp() {
         <div
           style={{
             position: "fixed",
-            top: panelTop,
+            bottom: panelBottom,
             left: panelLeft,
             right: panelRight,
             width: 260,
             borderRadius: 12,
-            background: "rgba(10, 13, 20, 0.94)",
+            background: "rgba(25, 0, 48, 0.96)",
             backdropFilter: "blur(24px)",
-            border: "1px solid rgba(34,197,94,0.18)",
+            border: "1px solid rgba(130, 0, 67, 0.3)",
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
             zIndex: 2147483646,
-            boxShadow: "0 0 0 1px rgba(34,197,94,0.08), 0 20px 40px rgba(0,0,0,0.55)",
+            boxShadow: "0 0 0 1px rgba(130,0,67,0.15), 0 20px 40px rgba(25,0,48,0.7)",
             fontFamily: "'DM Sans', system-ui, sans-serif",
             pointerEvents: dragging ? "none" : "auto"
           }}>
@@ -774,7 +827,7 @@ function VoiceApp() {
           <div
             style={{
               padding: "10px 14px",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
+              borderBottom: "1px solid rgba(130,0,67,0.2)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between"
@@ -785,15 +838,15 @@ function VoiceApp() {
                   width: 7,
                   height: 7,
                   borderRadius: "50%",
-                  background: "hsl(142, 71%, 45%)",
-                  boxShadow: "0 0 6px rgba(34,197,94,0.6)"
+                  background: "#D64992",
+                  boxShadow: "0 0 6px rgba(214,73,146,0.6)"
                 }}
               />
               <span
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
-                  color: "rgba(255,255,255,0.85)",
+                  color: "hsl(329, 85%, 68%)",
                   letterSpacing: "0.04em"
                 }}>
                 Voice Chat
@@ -876,7 +929,7 @@ function VoiceApp() {
                     gap: 8,
                     padding: "5px 8px",
                     borderRadius: 7,
-                    background: speaking ? "rgba(34,197,94,0.08)" : "transparent",
+                    background: speaking ? "rgba(214,73,146,0.08)" : "transparent",
                     transition: "background 0.15s"
                   }}>
                   {/* Avatar circle */}
@@ -885,16 +938,16 @@ function VoiceApp() {
                       width: 28,
                       height: 28,
                       borderRadius: "50%",
-                      background: p.self ? "hsl(142,71%,38%)" : "rgba(255,255,255,0.1)",
+                      background: p.self ? "#820043" : "rgba(255,255,255,0.1)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       fontSize: 11,
                       fontWeight: 700,
-                      color: p.self ? "hsl(220,20%,6%)" : "rgba(255,255,255,0.7)",
+                      color: p.self ? "#fff" : "rgba(255,255,255,0.7)",
                       flexShrink: 0,
                       boxShadow: speaking
-                        ? "0 0 0 2px rgba(34,197,94,0.7)"
+                        ? "0 0 0 2px rgba(214,73,146,0.7)"
                         : "0 0 0 1px rgba(255,255,255,0.08)",
                       transition: "box-shadow 0.15s"
                     }}>
@@ -934,7 +987,7 @@ function VoiceApp() {
           <div
             style={{
               padding: "8px 14px 12px",
-              borderTop: "1px solid rgba(255,255,255,0.06)",
+              borderTop: "1px solid rgba(130,0,67,0.2)",
               display: "flex",
               flexDirection: "column",
               gap: 10
@@ -1013,7 +1066,7 @@ function VoiceApp() {
                 onChange={(e) => handleVolumeChange(parseFloat(e.currentTarget.value))}
                 style={{
                   flex: 1,
-                  accentColor: "hsl(142, 71%, 45%)",
+                  accentColor: "hsl(329, 85%, 62%)",
                   cursor: "pointer",
                   height: 4
                 }}

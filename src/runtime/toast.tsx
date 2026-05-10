@@ -1,13 +1,23 @@
 import ReactDOM from "react-dom/client"
 import { Toaster } from "~/components/ui/sonner"
 import { toast } from "sonner"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import browser from "webextension-polyfill"
 import type { MessageKey } from "~/lib/i18n"
 import { t } from "~/lib/i18n"
 import { mountUi, runOnce, whenBodyReady } from "~/lib/runtime-ui"
 
 const ToastOverlay = () => {
+  const isFullscreenRef = useRef(false)
+
+  useEffect(() => {
+    const handler = () => {
+      isFullscreenRef.current = !!document.fullscreenElement
+    }
+    document.addEventListener("fullscreenchange", handler)
+    return () => document.removeEventListener("fullscreenchange", handler)
+  }, [])
+
   useEffect(() => {
     const callback = (
       msg: {
@@ -23,8 +33,13 @@ const ToastOverlay = () => {
       if (msg.to === "toast") {
         const content = msg.messageKey ? t(msg.messageKey) : msg.content
         if (msg.show) {
-          if (msg.error) toast.error(content)
-          else toast.success(content)
+          if (!isFullscreenRef.current) {
+            // Use a stable id keyed to the content so repeated identical toasts
+            // update the existing one instead of stacking new popups.
+            const id = msg.messageKey ?? content
+            if (msg.error) toast.error(content, { id })
+            else toast.success(content, { id })
+          }
         } else toast.dismiss()
         sendResponse(null)
         return true

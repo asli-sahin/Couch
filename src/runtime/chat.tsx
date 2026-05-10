@@ -13,6 +13,17 @@ type ChatMsg = {
 
 const BUBBLE_SIZE = 48
 const EDGE_MARGIN = 12
+const CHAT_PANEL_HEIGHT = 420
+const TOAST_DURATION_MS = 4000
+const TOAST_FADE_MS = 500
+const MAX_TOASTS = 4
+
+type Toast = {
+  id: number
+  nickname: string
+  text: string
+  visible: boolean
+}
 
 function ChatApp() {
   const [visible, setVisible] = useState(false)
@@ -23,6 +34,13 @@ function ChatApp() {
   const [inputText, setInputText] = useState("")
   const [bubblePos, setBubblePos] = useState({ x: -1, y: -1 })
   const [dragging, setDragging] = useState(false)
+  // Initialize to false: relying solely on the fullscreenchange event avoids
+  // false positives when document.fullscreenElement is transiently non-null at
+  // script injection time (which would otherwise lock the UI hidden permanently).
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const isFullscreenRef = useRef(false)
+  const toastIdRef = useRef(0)
   const isDown = useRef(false)
   const dragStart = useRef({ x: 0, y: 0, bx: 0, by: 0, moved: false })
   const listRef = useRef<HTMLDivElement>(null)
@@ -83,6 +101,23 @@ function ChatApp() {
     return () => browser.storage.onChanged.removeListener(listener)
   }, [])
 
+  // Track fullscreen state — hide the UI while fullscreen, restore on exit
+  useEffect(() => {
+    const handler = () => {
+      const fs = !!document.fullscreenElement
+      isFullscreenRef.current = fs
+      setIsFullscreen(fs)
+      if (fs) setOpen(false)
+    }
+    document.addEventListener("fullscreenchange", handler)
+    return () => document.removeEventListener("fullscreenchange", handler)
+  }, [])
+
+  // Publish open state so the voice panel can shift itself above the chat panel
+  useEffect(() => {
+    browser.storage.local.set({ chatPanelOpen: open }).catch(() => {})
+  }, [open])
+
   // Load saved position
   useEffect(() => {
     browser.storage.local.get("chatBubblePos").then((result) => {
@@ -91,7 +126,7 @@ function ChatApp() {
         setBubblePos({
           x: Math.max(
             EDGE_MARGIN,
-            Math.min(saved.x, window.innerWidth - BUBBLE_SIZE - EDGE_MARGIN)
+            Math.min(saved.x, document.documentElement.clientWidth - BUBBLE_SIZE - EDGE_MARGIN)
           ),
           y: Math.max(
             EDGE_MARGIN,
@@ -99,9 +134,10 @@ function ChatApp() {
           )
         })
       } else {
+        // Bottom-right, paired with voice bubble directly above
         setBubblePos({
-          x: window.innerWidth - BUBBLE_SIZE - EDGE_MARGIN,
-          y: window.innerHeight - BUBBLE_SIZE - 80
+          x: document.documentElement.clientWidth - BUBBLE_SIZE - EDGE_MARGIN,
+          y: window.innerHeight - BUBBLE_SIZE - EDGE_MARGIN
         })
       }
     })
@@ -115,7 +151,7 @@ function ChatApp() {
     const onResize = () => {
       const oldW = prevSize.current.w
       const oldH = prevSize.current.h
-      const newW = window.innerWidth
+      const newW = document.documentElement.clientWidth
       const newH = window.innerHeight
       prevSize.current = { w: newW, h: newH }
 
@@ -168,6 +204,24 @@ function ChatApp() {
         }
         if (!open && !msg.self) {
           setUnread((prev) => prev + 1)
+          // In fullscreen, show a temporary toast instead of the unread badge
+          if (isFullscreenRef.current) {
+            const id = ++toastIdRef.current
+            const nickname = msg.nickname || "Anonymous"
+            const text = msg.text || ""
+            setToasts((prev) => [
+              ...prev.slice(-(MAX_TOASTS - 1)),
+              { id, nickname, text, visible: true }
+            ])
+            setTimeout(() => {
+              setToasts((prev) =>
+                prev.map((t) => (t.id === id ? { ...t, visible: false } : t))
+              )
+              setTimeout(() => {
+                setToasts((prev) => prev.filter((t) => t.id !== id))
+              }, TOAST_FADE_MS)
+            }, TOAST_DURATION_MS)
+          }
         }
         sendResponse(null)
         return true
@@ -254,7 +308,7 @@ function ChatApp() {
       const newX = Math.max(
         EDGE_MARGIN,
         Math.min(
-          window.innerWidth - BUBBLE_SIZE - EDGE_MARGIN,
+          document.documentElement.clientWidth - BUBBLE_SIZE - EDGE_MARGIN,
           dragStart.current.bx + dx
         )
       )
@@ -278,7 +332,7 @@ function ChatApp() {
       const snappedX =
         bubblePos.x + BUBBLE_SIZE / 2 < midX
           ? EDGE_MARGIN
-          : window.innerWidth - BUBBLE_SIZE - EDGE_MARGIN
+          : document.documentElement.clientWidth - BUBBLE_SIZE - EDGE_MARGIN
       const finalPos = { x: snappedX, y: bubblePos.y }
       setBubblePos(finalPos)
       browser.storage.local.set({ chatBubblePos: finalPos })
@@ -296,6 +350,63 @@ function ChatApp() {
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`
   }
 
+  // While fullscreen: hide all UI, only render incoming message toasts
+  if (isFullscreen) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          bottom: BUBBLE_SIZE + EDGE_MARGIN * 2,
+          right: EDGE_MARGIN,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          alignItems: "flex-end",
+          zIndex: 2147483647,
+          pointerEvents: "none"
+        }}>
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            style={{
+              maxWidth: 300,
+              padding: "8px 14px",
+              borderRadius: 10,
+              background: "rgba(25, 0, 48, 0.88)",
+              backdropFilter: "blur(16px)",
+              border: "1px solid rgba(130, 0, 67, 0.4)",
+              boxShadow: "0 4px 20px rgba(25,0,48,0.6)",
+              fontFamily: "'DM Sans', system-ui, sans-serif",
+              opacity: toast.visible ? 1 : 0,
+              transform: toast.visible ? "translateY(0)" : "translateY(6px)",
+              transition: `opacity ${TOAST_FADE_MS}ms ease, transform ${TOAST_FADE_MS}ms ease`
+            }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: "hsl(329, 85%, 68%)",
+                display: "block",
+                marginBottom: 2,
+                letterSpacing: "0.04em"
+              }}>
+              {toast.nickname}
+            </span>
+            <span
+              style={{
+                fontSize: 13,
+                color: "rgba(255,255,255,0.88)",
+                lineHeight: 1.4,
+                wordBreak: "break-word"
+              }}>
+              {toast.text}
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <>
       {/* Bubble */}
@@ -306,18 +417,22 @@ function ChatApp() {
         onClick={toggleOpen}
         style={{
           position: "fixed",
-          left: bubblePos.x,
+          ...(bubbleOnRight
+            ? { right: dragging
+                ? document.documentElement.clientWidth - bubblePos.x - BUBBLE_SIZE
+                : EDGE_MARGIN }
+            : { left: bubblePos.x }),
           top: bubblePos.y,
           width: BUBBLE_SIZE,
           height: BUBBLE_SIZE,
           borderRadius: "50%",
-          background: "hsl(38, 92%, 55%)",
+          background: "#820043",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           cursor: "grab",
           zIndex: 2147483647,
-          boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+          boxShadow: "0 4px 16px rgba(130,0,67,0.45)",
           transition: dragging ? "none" : "left 0.2s ease",
           touchAction: "none",
           userSelect: "none"
@@ -328,7 +443,7 @@ function ChatApp() {
           height="24"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="hsl(220, 20%, 6%)"
+          stroke="rgba(255,255,255,0.92)"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round">
@@ -366,28 +481,22 @@ function ChatApp() {
           onKeyUp={(e) => e.stopPropagation()}
           style={{
             position: "fixed",
-            top: Math.max(
-              EDGE_MARGIN,
-              Math.min(
-                bubblePos.y - 420 + BUBBLE_SIZE,
-                window.innerHeight - 420 - EDGE_MARGIN
-              )
-            ),
+            bottom: EDGE_MARGIN,
             ...(bubbleOnRight
-              ? { right: window.innerWidth - bubblePos.x + 8 }
+              ? { right: BUBBLE_SIZE + EDGE_MARGIN + 8 }
               : { left: bubblePos.x + BUBBLE_SIZE + 8 }),
             width: 320,
-            height: 420,
+            height: CHAT_PANEL_HEIGHT,
             borderRadius: 12,
-            background: "rgba(12, 14, 20, 0.92)",
+            background: "rgba(25, 0, 48, 0.96)",
             backdropFilter: "blur(24px)",
-            border: "1px solid rgba(210, 160, 60, 0.15)",
+            border: "1px solid rgba(130, 0, 67, 0.3)",
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
             zIndex: 2147483646,
             boxShadow:
-              "0 0 0 1px rgba(210,160,60,0.08), 0 24px 48px rgba(0,0,0,0.5)",
+              "0 0 0 1px rgba(130,0,67,0.15), 0 24px 48px rgba(25,0,48,0.7)",
             fontFamily: "'DM Sans', system-ui, sans-serif",
             pointerEvents: dragging ? "none" : "auto"
           }}>
@@ -395,7 +504,7 @@ function ChatApp() {
           <div
             style={{
               padding: "12px 16px",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
+              borderBottom: "1px solid rgba(130,0,67,0.2)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between"
@@ -404,7 +513,7 @@ function ChatApp() {
               style={{
                 fontSize: 13,
                 fontWeight: 600,
-                color: "rgba(210, 160, 60, 0.9)",
+                color: "hsl(329, 85%, 68%)",
                 letterSpacing: "0.03em"
               }}>
               Chat
@@ -478,10 +587,10 @@ function ChatApp() {
                       padding: "6px 12px",
                       borderRadius: 12,
                       background: msg.self
-                        ? "hsl(38, 92%, 55%)"
+                        ? "#820043"
                         : "rgba(255,255,255,0.08)",
                       color: msg.self
-                        ? "hsl(220, 20%, 6%)"
+                        ? "#fff"
                         : "rgba(255,255,255,0.85)",
                       fontSize: 13,
                       lineHeight: 1.4,
@@ -508,7 +617,7 @@ function ChatApp() {
           <div
             style={{
               padding: "8px 12px 12px",
-              borderTop: "1px solid rgba(255,255,255,0.06)",
+              borderTop: "1px solid rgba(130,0,67,0.2)",
               display: "flex",
               gap: 8,
               alignItems: "flex-end"
@@ -529,8 +638,8 @@ function ChatApp() {
               style={{
                 flex: 1,
                 resize: "none",
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(130,0,67,0.1)",
+                border: "1px solid rgba(130,0,67,0.2)",
                 borderRadius: 8,
                 padding: "8px 12px",
                 color: "rgba(255,255,255,0.85)",
@@ -544,7 +653,7 @@ function ChatApp() {
             <button
               onClick={sendMessage}
               style={{
-                background: "hsl(38, 92%, 55%)",
+                background: "#820043",
                 border: "none",
                 borderRadius: 8,
                 width: 36,
@@ -560,7 +669,7 @@ function ChatApp() {
                 height="18"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="hsl(220, 20%, 6%)"
+                stroke="rgba(255,255,255,0.92)"
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round">

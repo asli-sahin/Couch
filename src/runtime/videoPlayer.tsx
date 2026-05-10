@@ -12,11 +12,11 @@ const WRAPPER_ATTR = "data-synclify-player-wrapper"
 /*  Design tokens                                                      */
 /* ------------------------------------------------------------------ */
 
-const AMBER = "hsl(38, 92%, 55%)"
-const AMBER_DIM = "hsl(38, 70%, 42%)"
-const AMBER_GLOW = "hsl(38, 92%, 55%, 0.35)"
-const GLASS_BG = "rgba(8, 10, 16, 0.82)"
-const GLASS_BORDER = "rgba(210, 160, 60, 0.12)"
+const AMBER = "hsl(329, 85%, 62%)"
+const AMBER_DIM = "hsl(329, 100%, 32%)"
+const AMBER_GLOW = "hsl(329, 85%, 62%, 0.35)"
+const GLASS_BG = "rgba(25, 0, 48, 0.88)"
+const GLASS_BORDER = "rgba(130, 0, 67, 0.18)"
 const TEXT_PRIMARY = "rgba(255, 255, 255, 0.92)"
 const TEXT_DIM = "rgba(255, 255, 255, 0.45)"
 const TRACK_BG = "rgba(255, 255, 255, 0.1)"

@@ -360,8 +360,8 @@ function App() {
     <div className="dark relative flex min-h-[320px] flex-col bg-background">
       {/* Ambient top glow */}
       <div
-        className="pointer-events-none absolute -top-20 left-1/2 h-40 w-60 -translate-x-1/2 rounded-full opacity-20 blur-3xl"
-        style={{ background: "hsl(38 92% 55%)" }}
+        className="pointer-events-none absolute -top-20 left-1/2 h-40 w-60 -translate-x-1/2 rounded-full opacity-25 blur-3xl"
+        style={{ background: "hsl(329 100% 35%)" }}
       />
 
       {/* Header */}
@@ -385,7 +385,7 @@ function App() {
                   <Tooltip open={openTooltip}>
                     <TooltipTrigger asChild>
                       <button
-                        className="animate-pulse-glow group relative cursor-pointer rounded-lg border border-[hsl(38_92%_55%/0.2)] bg-[hsl(38_92%_55%/0.06)] px-6 py-3 transition-all hover:border-[hsl(38_92%_55%/0.4)] hover:bg-[hsl(38_92%_55%/0.1)]"
+                        className="animate-pulse-glow group relative cursor-pointer rounded-lg border border-[hsl(329_85%_65%/0.25)] bg-[hsl(329_85%_65%/0.08)] px-6 py-3 transition-all hover:border-[hsl(329_85%_65%/0.45)] hover:bg-[hsl(329_85%_65%/0.13)]"
                         onMouseOver={() => {
                           setOpenTooltip(true)
                           setTooltipText(t("clickToCopy"))
@@ -393,7 +393,7 @@ function App() {
                         onMouseLeave={() => setOpenTooltip(false)}
                         onClick={copyToClipboard}>
                         <span
-                          className="text-glow block text-2xl font-bold tracking-[0.3em] text-[hsl(38_92%_55%)]"
+                          className="text-glow block text-2xl font-bold tracking-[0.3em] text-[hsl(329_85%_65%)]"
                           style={{
                             fontFamily: "'DM Mono', monospace"
                           }}>
@@ -416,7 +416,7 @@ function App() {
                 <div className="mt-2 flex justify-center">
                   <button
                     onClick={() => setParticipantsOpen(!participantsOpen)}
-                    className="group/pill inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border/60 bg-card/50 px-2.5 py-1 transition-all hover:border-[hsl(38_92%_55%/0.3)] hover:bg-card">
+                    className="group/pill inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border/60 bg-card/50 px-2.5 py-1 transition-all hover:border-[hsl(329_85%_65%/0.35)] hover:bg-card">
                     <svg
                       width="12"
                       height="12"
@@ -480,7 +480,7 @@ function App() {
                         <span
                           className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold uppercase ${
                             p.isHost
-                              ? "bg-[hsl(38_92%_55%/0.2)] text-[hsl(38_92%_55%)]"
+                              ? "bg-[hsl(329_85%_65%/0.2)] text-[hsl(329_85%_65%)]"
                               : "bg-secondary text-secondary-foreground"
                           }`}>
                           {p.nickname?.charAt(0) || "?"}
@@ -504,7 +504,7 @@ function App() {
                             </span>
                           )}
                           {p.isHost && (
-                            <span className="rounded-sm bg-[hsl(38_92%_55%/0.15)] px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(38_92%_55%)]">
+                            <span className="rounded-sm bg-[hsl(329_85%_65%/0.15)] px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(329_85%_65%)]">
                               {t("host")}
                             </span>
                           )}
@@ -520,12 +520,12 @@ function App() {
             {!error && (
               <div className="animate-fade-in-up stagger-2 mb-2 flex flex-col items-center gap-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                  <span className="text-xs text-emerald-400/80">
+                  <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[hsl(329_85%_65%)]" />
+                  <span className="text-xs text-[hsl(329_85%_65%/0.85)]">
                     {t("connectedAndSyncing")}
                   </span>
                   {isHost && (
-                    <span className="rounded-sm bg-[hsl(38_92%_55%/0.15)] px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(38_92%_55%)]">
+                    <span className="rounded-sm bg-[hsl(329_85%_65%/0.15)] px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(329_85%_65%)]">
                       {t("host")}
                     </span>
                   )}
@@ -555,9 +555,9 @@ function App() {
             <div className="animate-fade-in-up stagger-3 mt-auto flex flex-col gap-2">
               {(error || (state && !error)) && (
                 <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full border-border text-xs text-secondary-foreground hover:border-[hsl(38_92%_55%/0.4)] hover:text-foreground"
+                variant="outline"
+                size="sm"
+                className="w-full border-border text-xs text-secondary-foreground hover:border-[hsl(329_85%_65%/0.4)] hover:text-foreground"
                   onClick={() =>
                     createOrJoinRoom(
                       state ? { room: state?.[currentTab].roomId } : undefined
@@ -590,7 +590,7 @@ function App() {
                   setNickname(e.target.value)
                 }
                 maxLength={20}
-                className="h-9 rounded-lg border-border bg-card text-center text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-[hsl(38_92%_55%/0.4)] focus-visible:ring-[hsl(38_92%_55%/0.2)]"
+                className="h-9 rounded-lg border-border bg-card text-center text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-[hsl(329_85%_65%/0.5)] focus-visible:ring-[hsl(329_85%_65%/0.25)]"
               />
             </div>
 
@@ -598,14 +598,14 @@ function App() {
             <div className="animate-fade-in-up mb-3 flex items-center justify-between rounded-lg border border-border/50 bg-card/30 px-3 py-2.5">
               <div className="flex items-center gap-1.5">
                 <label
-                  htmlFor="allow-control-switch"
-                  className="text-[11px] font-medium uppercase tracking-[0.15em] text-muted-foreground">
+                    htmlFor="allow-control-switch"
+                    className="text-[11px] font-medium uppercase tracking-[0.15em] text-muted-foreground cursor-pointer">
                   {t("allowControl")}
                 </label>
                 <button
                   type="button"
                   onClick={() => setAllowControlHelpOpen(true)}
-                  className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border border-muted-foreground/40 text-[9px] font-semibold leading-none text-muted-foreground transition-colors hover:border-[hsl(38_92%_55%/0.6)] hover:text-foreground">
+                  className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border border-muted-foreground/40 text-[9px] font-semibold leading-none text-muted-foreground transition-colors hover:border-[hsl(329_85%_65%/0.6)] hover:text-foreground">
                   ?
                 </button>
               </div>
@@ -613,7 +613,7 @@ function App() {
                 id="allow-control-switch"
                 checked={allowControl}
                 onCheckedChange={setAllowControl}
-                className="data-[state=checked]:bg-[hsl(38_92%_55%)]"
+                className="data-[state=checked]:bg-[hsl(329_100%_25%)]"
               />
             </div>
 
@@ -629,8 +629,8 @@ function App() {
                     {t("allowControl")}
                   </h3>
                   <div className="flex flex-col gap-3">
-                    <div className="rounded-lg border border-[hsl(38_92%_55%/0.2)] bg-[hsl(38_92%_55%/0.06)] px-3 py-2.5">
-                      <p className="mb-1 text-[11px] font-semibold text-[hsl(38_92%_55%)]">
+                    <div                     className="rounded-lg border border-[hsl(329_85%_65%/0.25)] bg-[hsl(329_85%_65%/0.08)] px-3 py-2.5">
+                      <p className="mb-1 text-[11px] font-semibold text-[hsl(329_85%_65%)]">
                         ON
                       </p>
                       <p className="text-[11px] leading-snug text-secondary-foreground">
@@ -661,7 +661,7 @@ function App() {
             <div className="animate-fade-in-up stagger-1 mb-4">
               <Button
                 onClick={handleCreateRoomClick}
-                className="relative w-full overflow-hidden rounded-lg bg-[hsl(38_92%_55%)] py-5 text-sm font-semibold tracking-wide text-[hsl(220_20%_6%)] shadow-lg shadow-[hsl(38_92%_55%/0.2)] transition-all hover:bg-[hsl(38_80%_50%)] hover:shadow-[hsl(38_92%_55%/0.3)]">
+                className="relative w-full overflow-hidden rounded-lg bg-[hsl(329_100%_25%)] py-5 text-sm font-semibold tracking-wide text-white shadow-lg shadow-[hsl(329_100%_25%/0.35)] transition-all hover:bg-[hsl(329_100%_32%)] hover:shadow-[hsl(329_100%_25%/0.5)]">
                 {t("createRoom")}
               </Button>
             </div>
@@ -682,7 +682,7 @@ function App() {
               <Input
                 type="text"
                 placeholder={t("enterRoomCode")}
-                className="h-10 rounded-lg border-border bg-card text-center text-sm uppercase tracking-[0.15em] text-foreground placeholder:normal-case placeholder:tracking-normal placeholder:text-muted-foreground focus-visible:border-[hsl(38_92%_55%/0.4)] focus-visible:ring-[hsl(38_92%_55%/0.2)]"
+                className="h-10 rounded-lg border-border bg-card text-center text-sm uppercase tracking-[0.15em] text-foreground placeholder:normal-case placeholder:tracking-normal placeholder:text-muted-foreground focus-visible:border-[hsl(329_85%_65%/0.5)] focus-visible:ring-[hsl(329_85%_65%/0.25)]"
                 style={{ fontFamily: "'DM Mono', monospace" }}
                 {...register("room", {
                   required: {
@@ -707,7 +707,7 @@ function App() {
               <Button
                 type="submit"
                 variant="outline"
-                className="h-10 rounded-lg border-border text-sm font-medium text-foreground transition-all hover:border-[hsl(38_92%_55%/0.4)] hover:text-foreground">
+                className="h-10 rounded-lg border-border text-sm font-medium text-foreground transition-all hover:border-[hsl(329_85%_65%/0.4)] hover:text-foreground">
                 {t("joinRoom")}
               </Button>
             </form>
@@ -734,7 +734,7 @@ function App() {
                 }
                 placeholder={t("reportWhatWentWrongOptional")}
                 rows={2}
-                className="resize-none rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-[hsl(38_92%_55%/0.4)] focus:outline-none"
+                className="resize-none rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-[hsl(329_85%_65%/0.5)] focus:outline-none"
               />
               <div className="flex gap-2">
                 <Button
@@ -746,7 +746,7 @@ function App() {
                 </Button>
                 <Button
                   size="sm"
-                  className="h-7 flex-1 bg-[hsl(38_92%_55%)] text-[11px] text-[hsl(220_20%_6%)] hover:bg-[hsl(38_80%_50%)]"
+                  className="h-7 flex-1 bg-[hsl(329_100%_25%)] text-[11px] text-white hover:bg-[hsl(329_100%_32%)]"
                   onClick={submitReport}>
                   {t("sendReport")}
                 </Button>
@@ -763,18 +763,18 @@ function App() {
             setReportOpen(!reportOpen)
             setReportSent(false)
           }}
-          className="text-[11px] text-muted-foreground transition-colors hover:text-[hsl(38_92%_55%)]">
+          className="text-[11px] text-muted-foreground transition-colors hover:text-[hsl(329_85%_65%)]">
           {t("reportIssue")}
         </button>
         <button
           onClick={() => browser.runtime.openOptionsPage()}
-          className="text-[11px] text-muted-foreground transition-colors hover:text-[hsl(38_92%_55%)]">
+          className="text-[11px] text-muted-foreground transition-colors hover:text-[hsl(329_85%_65%)]">
           {t("settings")}
         </button>
         <a
           href="https://couch.party"
           target="about:blank"
-          className="text-[11px] text-muted-foreground transition-colors hover:text-[hsl(38_92%_55%)]">
+          className="text-[11px] text-muted-foreground transition-colors hover:text-[hsl(329_85%_65%)]">
           {t("website")}
         </a>
       </div>
