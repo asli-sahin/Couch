@@ -389,6 +389,8 @@ export default defineUnlistedScript(async () => {
     activeRoomState = null
     joinedRoom = null
     roomCode = ""
+    // Clean up per-tab redirect cooldown so future sessions start fresh.
+    browser.storage.local.remove(`synclify_redirect_cooldown_${tabId}`).catch(() => {})
     return persistState(nextState)
   }
 
@@ -560,7 +562,50 @@ export default defineUnlistedScript(async () => {
     socket.emit(SOCKET_EVENTS.CHAT_MESSAGE, roomCode, payload)
   }
 
-  const handleIncomingRoomUrlSync = (message: ChatMessage) => {
+  /**
+   * Returns true when the current page appears to be a bot/DDoS challenge
+   * (Cloudflare, hCaptcha, etc.) rather than the real content page.
+   * Used to avoid re-redirecting the client while it's solving a challenge.
+   */
+  const isSecurityChallengePage = (): boolean => {
+    const url = window.location.href
+    // Cloudflare challenge paths
+    if (url.includes("/cdn-cgi/")) return true
+
+    // Known challenge DOM markers (Cloudflare, Imperva, Akamai, etc.)
+    const challengeSelectors = [
+      "#cf-wrapper",
+      "#challenge-running",
+      "#challenge-form",
+      "#cf-challenge-running",
+      ".cf-browser-verification",
+      "#trk_jschal_js",
+      "#px-captcha",           // PerimeterX
+      "#ddos-protection",
+      "#waf-challenge-html",
+      "[data-ray]"             // Cloudflare Ray ID wrapper
+    ]
+    if (challengeSelectors.some((sel) => document.querySelector(sel))) return true
+
+    // Title-based detection (last resort — titles can vary by locale)
+    const title = document.title.toLowerCase()
+    const challengeTitles = [
+      "just a moment",
+      "checking your browser",
+      "ddos protection",
+      "please wait",
+      "attention required",
+      "403 forbidden"
+    ]
+    if (challengeTitles.some((t) => title.includes(t))) return true
+
+    return false
+  }
+
+  /** Minimum milliseconds between URL-sync-triggered navigations (per tab). */
+  const URL_REDIRECT_COOLDOWN_MS = 6000
+
+  const handleIncomingRoomUrlSync = async (message: ChatMessage): Promise<boolean> => {
     if (!message.text.startsWith(ROOM_URL_SYNC_PREFIX)) return false
 
     const targetUrl = message.text.slice(ROOM_URL_SYNC_PREFIX.length).trim()
@@ -601,6 +646,47 @@ export default defineUnlistedScript(async () => {
       return true
     }
 
+    // Don't redirect while the user is on a bot-challenge / CAPTCHA page.
+    // Redirecting away resets the challenge and causes an infinite loop.
+    if (isSecurityChallengePage()) {
+      logRoomDebug("urlSync.receive.skip.challengePage", {
+        extra: {
+          targetUrl,
+          here,
+          title: document.title
+        }
+      })
+      console.log("[couch-url-sync] receive.skip.challengePage — waiting for challenge to complete", {
+        here,
+        targetUrl,
+        title: document.title
+      })
+      return true
+    }
+
+    // Rate-limit redirects: if this tab navigated very recently, skip to avoid
+    // rapid redirect loops when an intermediate page requests the host URL again.
+    const cooldownKey = `synclify_redirect_cooldown_${tabId}`
+    try {
+      const cooldownResult = await browser.storage.local.get(cooldownKey)
+      const lastRedirectAt = cooldownResult[cooldownKey] as number | undefined
+      if (lastRedirectAt && Date.now() - lastRedirectAt < URL_REDIRECT_COOLDOWN_MS) {
+        logRoomDebug("urlSync.receive.skip.cooldown", {
+          extra: {
+            targetUrl,
+            msSinceLast: Date.now() - lastRedirectAt
+          }
+        })
+        console.log("[couch-url-sync] receive.skip.cooldown", {
+          targetUrl,
+          msSinceLast: Date.now() - lastRedirectAt
+        })
+        return true
+      }
+    } catch {
+      // Storage read failed — proceed with redirect rather than blocking indefinitely.
+    }
+
     logRoomDebug("urlSync.receive.navigate", {
       extra: {
         from: window.location.href,
@@ -611,6 +697,14 @@ export default defineUnlistedScript(async () => {
       from: window.location.href,
       to: targetUrl
     })
+
+    // Record redirect time before navigating (the script context is about to be destroyed).
+    try {
+      await browser.storage.local.set({ [cooldownKey]: Date.now() })
+    } catch {
+      // Best effort.
+    }
+
     window.location.href = targetUrl
     return true
   }
@@ -1042,7 +1136,7 @@ export default defineUnlistedScript(async () => {
   })
 
   // --- Chat message handling ---
-  socket.on(SOCKET_EVENTS.CHAT_MESSAGE, (message: ChatMessage) => {
+  socket.on(SOCKET_EVENTS.CHAT_MESSAGE, async (message: ChatMessage) => {
     if (message.text === ROOM_URL_SYNC_REQUEST) {
       const localParticipantId = state?.[tabId]?.participantId
       const isLocalHost =
@@ -1059,7 +1153,7 @@ export default defineUnlistedScript(async () => {
       if (isLocalHost) emitRoomUrlSync()
       return
     }
-    if (handleIncomingRoomUrlSync(message)) return
+    if (await handleIncomingRoomUrlSync(message)) return
     // Forward to chat content script via background relay
     browser.runtime.sendMessage({
       action: "forwardToChat",

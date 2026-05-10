@@ -535,6 +535,12 @@ const DEBUG_INJECT_FLOW = true // in background.ts
 **Cause**: Keyboard events inside the chat Shadow DOM bubble across the shadow boundary into the light DOM, where site-level handlers intercept them.
 **Solution**: The chat window container in `runtime/chat.tsx` calls `e.stopPropagation()` on `onKeyDown` and `onKeyUp`, stopping events inside the shadow DOM from escaping to the page. The textarea's own `onKeyDown` also calls `stopPropagation()` before handling Enter. Note: `injected.ts` also has an `isTypingTarget(e)` guard (using `e.composedPath()[0]`) on its own keydown handlers, but that alone is insufficient since it only covers the extension's handlers, not the host site's.
 
+### Issue: Client redirects in a loop when host URL has a Cloudflare challenge
+**Cause**: When the host's video URL sits behind a Cloudflare (or similar) bot-challenge page, the client gets redirected to the challenge URL. That triggers `tabs.onUpdated` → `reinjectTab` → `emitRoomUrlSyncRequest` → host sends the original URL back → `urlsPlaybackEquivalent` returns false (challenge URL ≠ video URL) → redirect again → infinite loop.
+**Solution**: `handleIncomingRoomUrlSync` in `injected.ts` now:
+1. Detects challenge pages via URL path (`/cdn-cgi/`), known DOM selectors (`#cf-wrapper`, `#challenge-running`, etc.), and title patterns ("Just a moment", "Checking your browser", …). If on a challenge page, the redirect is skipped so the user can complete the challenge.
+2. Applies a 6-second per-tab redirect cooldown stored in `browser.storage.local` (`synclify_redirect_cooldown_<tabId>`) as a secondary guard against rapid re-redirects from other intermediate pages. The key is removed on room exit.
+
 ### Issue: Extension reloads lose state
 **Cause**: Extension state not persisted across extension reloads
 **Solution**: This is intentional; state cleared on `runtime.onInstalled` with version change
@@ -635,6 +641,6 @@ Ten new `SOCKET_EVENTS` enum entries and payload types: `VoiceOfferPayload`, `Vo
 
 ---
 
-**Last Updated**: 2026-05-10 (chat bug fixes — double message echo, keyboard event leakage)
+**Last Updated**: 2026-05-10 (chat bug fixes — double message echo, keyboard event leakage; URL sync redirect loop on Cloudflare/challenge pages)
 **Project Version**: 0.5.0
 **Maintained by**: andrea
