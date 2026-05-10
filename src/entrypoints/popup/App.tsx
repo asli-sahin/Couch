@@ -41,8 +41,8 @@ function App() {
   const [reportDetails, setReportDetails] = useState("")
   const [reportSent, setReportSent] = useState(false)
   const [participantsOpen, setParticipantsOpen] = useState(false)
-  const [sharedMode, setSharedMode] = useState(true)
-  const [sharedModeHelpOpen, setSharedModeHelpOpen] = useState(false)
+  const [allowControl, setAllowControl] = useState(true)
+  const [allowControlHelpOpen, setAllowControlHelpOpen] = useState(false)
   const {
     register,
     handleSubmit,
@@ -204,7 +204,7 @@ function App() {
       const participantId =
         state?.[currentTab]?.participantId || crypto.randomUUID()
       const controlMode: ControlMode =
-        state?.[currentTab]?.controlMode ?? (sharedMode ? "shared" : "host")
+        state?.[currentTab]?.controlMode ?? (allowControl ? "shared" : "host")
       await browser.storage.local.set({ nickname: nick })
       const previousTabState = state?.[currentTab]
       const newState = Object.assign({}, state ?? {}, {
@@ -243,7 +243,7 @@ function App() {
           }
         })
     },
-    [currentTab, responseCallback, state, setStoredState, nickname, sharedMode]
+    [currentTab, responseCallback, state, setStoredState, nickname, allowControl]
   )
 
   const requestRoomPermission = useCallback(() => {
@@ -594,39 +594,39 @@ function App() {
               />
             </div>
 
-            {/* Shared mode toggle */}
+            {/* Allow control toggle */}
             <div className="animate-fade-in-up mb-3 flex items-center justify-between rounded-lg border border-border/50 bg-card/30 px-3 py-2.5">
               <div className="flex items-center gap-1.5">
                 <label
-                  htmlFor="shared-mode-switch"
+                  htmlFor="allow-control-switch"
                   className="text-[11px] font-medium uppercase tracking-[0.15em] text-muted-foreground">
-                  {t("sharedMode")}
+                  {t("allowControl")}
                 </label>
                 <button
                   type="button"
-                  onClick={() => setSharedModeHelpOpen(true)}
+                  onClick={() => setAllowControlHelpOpen(true)}
                   className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border border-muted-foreground/40 text-[9px] font-semibold leading-none text-muted-foreground transition-colors hover:border-[hsl(38_92%_55%/0.6)] hover:text-foreground">
                   ?
                 </button>
               </div>
               <Switch
-                id="shared-mode-switch"
-                checked={sharedMode}
-                onCheckedChange={setSharedMode}
+                id="allow-control-switch"
+                checked={allowControl}
+                onCheckedChange={setAllowControl}
                 className="data-[state=checked]:bg-[hsl(38_92%_55%)]"
               />
             </div>
 
-            {/* Shared mode help modal */}
-            {sharedModeHelpOpen && (
+            {/* Allow control help modal */}
+            {allowControlHelpOpen && (
               <div
                 className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-                onClick={() => setSharedModeHelpOpen(false)}>
+                onClick={() => setAllowControlHelpOpen(false)}>
                 <div
                   className="animate-fade-in-up mx-4 w-full max-w-[280px] rounded-xl border border-border bg-background p-5 shadow-xl"
                   onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                   <h3 className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.15em] text-foreground">
-                    {t("sharedMode")}
+                    {t("allowControl")}
                   </h3>
                   <div className="flex flex-col gap-3">
                     <div className="rounded-lg border border-[hsl(38_92%_55%/0.2)] bg-[hsl(38_92%_55%/0.06)] px-3 py-2.5">
@@ -634,7 +634,7 @@ function App() {
                         ON
                       </p>
                       <p className="text-[11px] leading-snug text-secondary-foreground">
-                        {t("sharedModeOnHelp")}
+                        {t("allowControlOnHelp")}
                       </p>
                     </div>
                     <div className="rounded-lg border border-border/60 bg-card/40 px-3 py-2.5">
@@ -642,7 +642,7 @@ function App() {
                         OFF
                       </p>
                       <p className="text-[11px] leading-snug text-secondary-foreground">
-                        {t("sharedModeOffHelp")}
+                        {t("allowControlOffHelp")}
                       </p>
                     </div>
                   </div>
@@ -650,7 +650,7 @@ function App() {
                     variant="outline"
                     size="sm"
                     className="mt-4 w-full text-xs"
-                    onClick={() => setSharedModeHelpOpen(false)}>
+                    onClick={() => setAllowControlHelpOpen(false)}>
                     {t("close")}
                   </Button>
                 </div>

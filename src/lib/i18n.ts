@@ -60,9 +60,9 @@ export const MESSAGE_KEYS = [
   "you",
   "hostControlsPlayback",
   "sharedControlsPlayback",
-  "sharedMode",
-  "sharedModeOnHelp",
-  "sharedModeOffHelp"
+  "allowControl",
+  "allowControlOnHelp",
+  "allowControlOffHelp"
 ] as const
 
 export type MessageKey = (typeof MESSAGE_KEYS)[number]

@@ -253,6 +253,24 @@ io.on("connection", (socket) => {
   })
 
   socket.on("videoEvent", (roomId, eventType, volumeValue, currentTime) => {
+    const room = rooms.get(roomId)
+    if (room && room.controlMode === "host") {
+      const senderParticipantId = socket.data.participantId
+      const hostSocketId = room.socketsByParticipant.get(room.hostId)
+      const isHostSocket = socket.id === hostSocketId
+      if (!isHostSocket) {
+        log("videoEvent.blocked", {
+          socketId: socket.id,
+          roomId,
+          senderParticipantId,
+          hostId: room.hostId,
+          hostSocketId: hostSocketId ?? null,
+          eventType,
+          reason: "non-host event dropped in host-only control mode"
+        })
+        return
+      }
+    }
     socket.to(roomId).emit(
       "videoEvent",
       eventType,

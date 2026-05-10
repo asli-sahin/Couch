@@ -77,7 +77,7 @@
   "host": { "message": "Anfitrião" },
   "you": { "message": "Você" },
   "hostControlsPlayback": { "message": "Apenas o anfitrião pode controlar a reprodução" },
-  "sharedMode": { "message": "Modo compartilhado" },
-  "sharedModeOnHelp": { "message": "Quando o modo compartilhado está ativado, qualquer pessoa na sala pode reproduzir, pausar, avançar ou alterar a reprodução para todos." },
-  "sharedModeOffHelp": { "message": "Quando o modo compartilhado está desativado, apenas o anfitrião pode reproduzir, pausar, avançar ou alterar a reprodução para todos." }
+  "allowControl": { "message": "Modo compartilhado" },
+  "allowControlOnHelp": { "message": "Quando o modo compartilhado está ativado, qualquer pessoa na sala pode reproduzir, pausar, avançar ou alterar a reprodução para todos." },
+  "allowControlOffHelp": { "message": "Quando o modo compartilhado está desativado, apenas o anfitrião pode reproduzir, pausar, avançar ou alterar a reprodução para todos." }
 }

@@ -1,0 +1,78 @@
+{
+  "extName": { "message": "Couch - Arkadaşlarınızla senkronize izleyin" },
+  "extDescription": {
+    "message": "Tarayıcınızdan doğrudan bir izleme partisi oluşturun - her yerde çalışır, reklamsız."
+  },
+  "popupTitle": { "message": "Couch" },
+  "optionsTitle": { "message": "Couch Ayarları" },
+  "anonymousNickname": { "message": "Anonim" },
+  "clickToCopy": { "message": "Kopyalamak için tıklayın" },
+  "copied": { "message": "Kopyalandı!" },
+  "videoNotDetectedYet": { "message": "Video henüz algılanmadı" },
+  "videoDetected": { "message": "Video algılandı" },
+  "videoNotFound": { "message": "Video bulunamadı" },
+  "remotePlayMutedHint": {
+    "message": "Senkronize oynatma sessiz başladı — ses için sayfaya veya videoya tıklayın."
+  },
+  "multipleVideosDetected": { "message": "Birden fazla video algılandı" },
+  "injectedScriptNotReadyRetrySync": {
+    "message": "Enjekte edilen komut dosyası henüz hazır değil, senkronizasyonu yeniden deneyin"
+  },
+  "roomCode": { "message": "Oda Kodu" },
+  "connectedAndSyncing": { "message": "Bağlı ve senkronize" },
+  "retrySync": { "message": "Senkronizasyonu yeniden dene" },
+  "leaveRoom": { "message": "Odadan çık" },
+  "chatNickname": { "message": "Sohbet takma adı" },
+  "nicknameOptional": { "message": "Takma ad (isteğe bağlı)" },
+  "createRoom": { "message": "Oda Oluştur" },
+  "orJoin": { "message": "veya katıl" },
+  "enterRoomCode": { "message": "Oda kodu girin" },
+  "roomCodeEmpty": { "message": "Oda kodu boş olamaz." },
+  "roomCodeTooLong": { "message": "Oda kodu çok uzun." },
+  "roomCodeTooShort": { "message": "Oda kodu çok kısa." },
+  "roomCodeFormatIncorrect": { "message": "Oda kodu formatı hatalı." },
+  "joinRoom": { "message": "Odaya Katıl" },
+  "thanksForReporting": { "message": "Bildirdiğiniz için teşekkürler!" },
+  "reportWebsiteNotWorking": {
+    "message": "Bu web sitesini çalışmıyor olarak bildir"
+  },
+  "reportWhatWentWrongOptional": { "message": "Ne yanlış gitti? (isteğe bağlı)" },
+  "cancel": { "message": "İptal" },
+  "close": { "message": "Kapat" },
+  "sendReport": { "message": "Rapor Gönder" },
+  "reportIssue": { "message": "Sorun Bildir" },
+  "settings": { "message": "Ayarlar" },
+  "website": { "message": "Web sitesi" },
+  "settingsSaved": { "message": "Ayarlar kaydedildi" },
+  "failedToSaveSettings": { "message": "Ayarlar kaydedilemedi" },
+  "syncAudio": { "message": "Sesi senkronize et" },
+  "syncAudioDescription": { "message": "Sesi diğer izleyiciyle senkronize et" },
+  "chat": { "message": "Sohbet" },
+  "chatDescription": { "message": "Sohbet balonu yerleşimini göster" },
+  "reactions": { "message": "Tepkiler" },
+  "reactionsDescription": { "message": "Emoji tepki çubuğunu göster" },
+  "customPlayer": { "message": "Özel oynatıcı" },
+  "customPlayerDescription": {
+    "message": "Yerel video kontrollerini Couch arayüzüyle değiştir"
+  },
+  "saveSettings": { "message": "Ayarları Kaydet" },
+  "chooseVideoToSync": { "message": "Senkronize edilecek bir video seçin" },
+  "unknownDuration": { "message": "Bilinmiyor" },
+  "switchToNativeVideoControls": {
+    "message": "Yerel video kontrollerine geç"
+  },
+  "nativeUi": { "message": "Yerel Arayüz" },
+  "switchToSynclifyVideoPlayer": {
+    "message": "Couch video oynatıcısına geç"
+  },
+  "synclifyUi": { "message": "Couch Arayüzü" },
+  "typeMessage": { "message": "Mesaj yazın..." },
+  "participants": { "message": "Katılımcılar" },
+  "host": { "message": "Ev Sahibi" },
+  "you": { "message": "Sen" },
+  "hostControlsPlayback": { "message": "Yalnızca ev sahibi oynatmayı kontrol edebilir" },
+  "sharedControlsPlayback": { "message": "Herkes oynatmayı kontrol edebilir" },
+  "allowControl": { "message": "Kontrol izni" },
+  "allowControlOnHelp": { "message": "Kontrol izni açık olduğunda, odadaki herkes herkese ait oynatmayı başlatabilir, duraklatabilir, ileri sarabilir veya değiştirebilir." },
+  "allowControlOffHelp": { "message": "Kontrol izni kapalı olduğunda, yalnızca ev sahibi herkese ait oynatmayı başlatabilir, duraklatabilir, ileri sarabilir veya değiştirebilir." }
+}

@@ -67,7 +67,7 @@
   "host": { "message": "میزبان" },
   "you": { "message": "آپ" },
   "hostControlsPlayback": { "message": "صرف میزبان ہی پلے بیک کنٹرول کرسکتا ہے" },
-  "sharedMode": { "message": "مشترکہ موڈ" },
-  "sharedModeOnHelp": { "message": "جب Shared mode آن ہو تو روم میں کوئی بھی سب کے لیے پلے، پاز، سیک یا پلے بیک تبدیل کرسکتا ہے۔" },
-  "sharedModeOffHelp": { "message": "جب Shared mode آف ہو تو صرف میزبان ہی سب کے لیے پلے، پاز، سیک یا پلے بیک تبدیل کرسکتا ہے۔" }
+  "allowControl": { "message": "مشترکہ موڈ" },
+  "allowControlOnHelp": { "message": "جب Allow control آن ہو تو روم میں کوئی بھی سب کے لیے پلے، پاز، سیک یا پلے بیک تبدیل کرسکتا ہے۔" },
+  "allowControlOffHelp": { "message": "جب Allow control آف ہو تو صرف میزبان ہی سب کے لیے پلے، پاز، سیک یا پلے بیک تبدیل کرسکتا ہے۔" }
 }

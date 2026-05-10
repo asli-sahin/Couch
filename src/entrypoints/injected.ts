@@ -12,7 +12,7 @@ import {
 } from "~/types/socket"
 import type { State, TabState } from "~/types/state"
 import { VIDEO_EVENTS } from "~/types/video"
-import { findSiteVideo, detectStreamingSite } from "~/lib/video-detection"
+import { findSiteVideo, detectStreamingSite, getSiteConfig } from "~/lib/video-detection"
 import { debugRoomLog } from "~/lib/debug"
 import browser from "webextension-polyfill"
 import { io } from "socket.io-client"
@@ -109,9 +109,145 @@ export default defineUnlistedScript(async () => {
   let teardownRemotePlaybackGesture: (() => void) | null = null
   const SYNTHETIC_SUPPRESSION_MS = 400
 
+  // ----- Host-only control lock state -----
+  type SyncedHostState = {
+    paused: boolean
+    currentTime: number
+    syncedAt: number
+    playbackRate: number
+  }
+  let lastSyncedHostState: SyncedHostState | null = null
+  let controlLockOverlay: HTMLDivElement | null = null
+  let controlLockKeyboardHandler: ((e: KeyboardEvent) => void) | null = null
+
   const clearPlaybackGestureListeners = () => {
     teardownRemotePlaybackGesture?.()
     teardownRemotePlaybackGesture = null
+  }
+
+  // ----- Control lock: blocks mouse/touch via overlay + keyboard shortcuts -----
+
+  /**
+   * Keys that affect playback position or play/pause state.
+   * These are intercepted at the window capture phase so the site never
+   * receives them when a non-host is in host-only control mode.
+   */
+  const BLOCKED_MEDIA_KEYS = new Set([
+    " ", // Space — play/pause (most sites)
+    "k", "K", // YouTube play/pause
+    "j", "J", // YouTube back 10 s
+    "l", "L", // YouTube forward 10 s
+    "ArrowLeft", "ArrowRight", // back/forward 5 s
+    "Home", "End", // seek to start / end
+    ".", ",", // frame-step while paused
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" // YouTube seek to % of video
+  ])
+
+  const findPlayerContainer = (): Element | null => {
+    const config = getSiteConfig()
+    if (config?.playerContainer) {
+      const el = document.querySelector(config.playerContainer)
+      if (el) {
+        console.log("[couch-control-lock] findPlayerContainer: found via site config", {
+          selector: config.playerContainer,
+          element: el.tagName,
+          id: (el as HTMLElement).id
+        })
+        return el
+      }
+      console.warn("[couch-control-lock] findPlayerContainer: site config selector matched nothing", {
+        selector: config.playerContainer
+      })
+    }
+    const fallback = video?.parentElement ?? null
+    console.log("[couch-control-lock] findPlayerContainer: using fallback parent", {
+      tagName: fallback?.tagName,
+      id: (fallback as HTMLElement | null)?.id,
+      className: (fallback as HTMLElement | null)?.className?.slice(0, 60)
+    })
+    return fallback
+  }
+
+  const enableControlLock = () => {
+    console.log("[couch-control-lock] enableControlLock called", {
+      hasExistingOverlay: !!controlLockOverlay,
+      hasKeyboardHandler: !!controlLockKeyboardHandler,
+      videoFound: !!video
+    })
+
+    if (!controlLockOverlay) {
+      const container = findPlayerContainer()
+      if (container) {
+        controlLockOverlay = document.createElement("div")
+        controlLockOverlay.id = "__synclify-control-lock__"
+        controlLockOverlay.style.cssText = [
+          "position: absolute",
+          "top: 0",
+          "left: 0",
+          "right: 0",
+          "bottom: 0",
+          "z-index: 2147483647",
+          "cursor: not-allowed",
+          "background: transparent",
+          "pointer-events: all"
+        ].join("; ")
+
+        const containerEl = container as HTMLElement
+        const existingPosition = window.getComputedStyle(containerEl).position
+        if (existingPosition === "static") {
+          containerEl.style.position = "relative"
+          console.log("[couch-control-lock] set container to position:relative", {
+            tagName: containerEl.tagName,
+            id: containerEl.id
+          })
+        }
+        containerEl.appendChild(controlLockOverlay)
+        console.log("[couch-control-lock] overlay injected", {
+          container: containerEl.tagName,
+          containerId: containerEl.id,
+          containerClass: containerEl.className?.slice(0, 60)
+        })
+      } else {
+        console.warn("[couch-control-lock] enableControlLock: no container found, overlay skipped")
+      }
+    } else {
+      console.log("[couch-control-lock] overlay already exists, skipping re-injection")
+    }
+
+    if (!controlLockKeyboardHandler) {
+      controlLockKeyboardHandler = (e: KeyboardEvent) => {
+        if (BLOCKED_MEDIA_KEYS.has(e.key)) {
+          e.preventDefault()
+          e.stopImmediatePropagation()
+          console.log("[couch-control-lock] blocked keyboard shortcut", {
+            key: e.key,
+            code: e.code,
+            target: (e.target as Element)?.tagName
+          })
+        }
+      }
+      window.addEventListener("keydown", controlLockKeyboardHandler, true)
+      console.log("[couch-control-lock] keyboard blocker attached")
+    } else {
+      console.log("[couch-control-lock] keyboard blocker already attached, skipping")
+    }
+  }
+
+  const disableControlLock = () => {
+    console.log("[couch-control-lock] disableControlLock called", {
+      hasOverlay: !!controlLockOverlay,
+      hasKeyboardHandler: !!controlLockKeyboardHandler
+    })
+    if (controlLockOverlay) {
+      controlLockOverlay.remove()
+      controlLockOverlay = null
+      console.log("[couch-control-lock] overlay removed")
+    }
+    if (controlLockKeyboardHandler) {
+      window.removeEventListener("keydown", controlLockKeyboardHandler, true)
+      controlLockKeyboardHandler = null
+      console.log("[couch-control-lock] keyboard blocker detached")
+    }
   }
 
   const applyRemoteSyncedPlay = async (
@@ -290,6 +426,7 @@ export default defineUnlistedScript(async () => {
     })
     activeRoomState = nextRoomState
     joinedRoom = nextRoomState.roomId
+    const isLocalHost = nextRoomState.hostId === participantId
     await updateTabState({
       roomId: nextRoomState.roomId,
       participantId,
@@ -298,10 +435,22 @@ export default defineUnlistedScript(async () => {
       participants: nextRoomState.participants,
       participantCount: nextRoomState.participantCount,
       hostId: nextRoomState.hostId,
-      isHost: nextRoomState.hostId === participantId,
+      isHost: isLocalHost,
       maxParticipants: nextRoomState.maxParticipants
     })
     await trackMultiParticipantRoom(nextRoomState)
+
+    console.log("[couch-control-lock] applyRoomState: evaluating control lock", {
+      controlMode: nextRoomState.controlMode,
+      isLocalHost,
+      participantId,
+      hostId: nextRoomState.hostId
+    })
+    if (nextRoomState.controlMode === "host" && !isLocalHost) {
+      enableControlLock()
+    } else {
+      disableControlLock()
+    }
   }
 
   const ensureParticipantId = async () => {
@@ -533,10 +682,50 @@ export default defineUnlistedScript(async () => {
 
   const videoEventHandler = (event: Event) => {
     const controlMode = state?.[tabId]?.controlMode ?? "shared"
-    const canControlPlayback =
-      controlMode === "shared" || state?.[tabId]?.isHost
+    const isHost = state?.[tabId]?.isHost ?? false
+    const canControlPlayback = controlMode === "shared" || isHost
 
-    if (roomCode && canControlPlayback) {
+    if (!canControlPlayback) {
+      // Overlay + keyboard blocker should prevent most interactions.
+      // This revert is a safety net for anything that slips through
+      // (e.g. site-internal programmatic calls, mobile gestures).
+      console.log("[couch-control-lock] videoEventHandler: fallback revert triggered for non-host", {
+        eventType: event.type,
+        hasLastSyncedState: !!lastSyncedHostState,
+        controlMode,
+        isHost
+      })
+      suppressOutboundEvents()
+      if (lastSyncedHostState && video) {
+        const elapsed = (Date.now() - lastSyncedHostState.syncedAt) / 1000
+        const expectedTime = lastSyncedHostState.paused
+          ? lastSyncedHostState.currentTime
+          : lastSyncedHostState.currentTime + elapsed * lastSyncedHostState.playbackRate
+        console.log("[couch-control-lock] reverting video state", {
+          eventType: event.type,
+          expectedTime: expectedTime.toFixed(2),
+          hostStatePaused: lastSyncedHostState.paused,
+          currentVideoTime: video.currentTime.toFixed(2),
+          currentVideoPaused: video.paused,
+          elapsedSinceSync: elapsed.toFixed(2)
+        })
+        if (event.type === VIDEO_EVENTS.PLAY && lastSyncedHostState.paused) {
+          video.pause()
+        } else if (event.type === VIDEO_EVENTS.PAUSE && !lastSyncedHostState.paused) {
+          void applyRemoteSyncedPlay(video, expectedTime)
+        } else if (event.type === VIDEO_EVENTS.SEEKED) {
+          video.currentTime = expectedTime
+        }
+      } else {
+        console.warn("[couch-control-lock] fallback revert: no lastSyncedHostState or video available", {
+          hasVideo: !!video,
+          hasState: !!lastSyncedHostState
+        })
+      }
+      return
+    }
+
+    if (roomCode) {
       const volumeOrRate =
         event.type === VIDEO_EVENTS.RATECHANGE
           ? video?.playbackRate
@@ -606,6 +795,17 @@ export default defineUnlistedScript(async () => {
         }
       }
       boundVideo = video
+      lastSyncedHostState = {
+        paused: video.paused,
+        currentTime: video.currentTime,
+        syncedAt: Date.now(),
+        playbackRate: video.playbackRate || 1
+      }
+      console.log("[couch-control-lock] lastSyncedHostState initialized from video element", {
+        paused: lastSyncedHostState.paused,
+        currentTime: lastSyncedHostState.currentTime.toFixed(2),
+        playbackRate: lastSyncedHostState.playbackRate
+      })
       for (const event of Object.values(VIDEO_EVENTS)) {
         boundVideo.addEventListener(event, checkVideoEvent)
       }
@@ -929,15 +1129,32 @@ export default defineUnlistedScript(async () => {
 
       switch (eventType) {
         case VIDEO_EVENTS.PLAY: {
-          void applyRemoteSyncedPlay(
-            video,
-            adjustTime(Number.parseFloat(currentTime))
-          )
+          const adjustedTime = adjustTime(Number.parseFloat(currentTime))
+          void applyRemoteSyncedPlay(video, adjustedTime)
+          lastSyncedHostState = {
+            paused: false,
+            currentTime: adjustedTime,
+            syncedAt: Date.now(),
+            playbackRate: video.playbackRate || 1
+          }
+          console.log("[couch-control-lock] lastSyncedHostState updated: PLAY", {
+            currentTime: adjustedTime.toFixed(2),
+            playbackRate: lastSyncedHostState.playbackRate
+          })
           break
         }
         case VIDEO_EVENTS.PAUSE:
           suppressOutboundEvents()
           video.pause()
+          lastSyncedHostState = {
+            paused: true,
+            currentTime: video.currentTime,
+            syncedAt: Date.now(),
+            playbackRate: video.playbackRate || 1
+          }
+          console.log("[couch-control-lock] lastSyncedHostState updated: PAUSE", {
+            currentTime: video.currentTime.toFixed(2)
+          })
           break
         case VIDEO_EVENTS.VOLUMECHANGE:
           if (!settings?.syncAudio) break
@@ -948,11 +1165,31 @@ export default defineUnlistedScript(async () => {
           const adjustedTime = adjustTime(Number.parseFloat(currentTime))
           suppressOutboundEvents()
           video.currentTime = adjustedTime
+          if (lastSyncedHostState) {
+            lastSyncedHostState = {
+              ...lastSyncedHostState,
+              currentTime: adjustedTime,
+              syncedAt: Date.now()
+            }
+            console.log("[couch-control-lock] lastSyncedHostState updated: SEEKED", {
+              currentTime: adjustedTime.toFixed(2)
+            })
+          }
           break
         }
         case VIDEO_EVENTS.RATECHANGE:
           suppressOutboundEvents()
           video.playbackRate = Number.parseFloat(volumeValue)
+          if (lastSyncedHostState) {
+            lastSyncedHostState = {
+              ...lastSyncedHostState,
+              playbackRate: Number.parseFloat(volumeValue),
+              syncedAt: Date.now()
+            }
+            console.log("[couch-control-lock] lastSyncedHostState updated: RATECHANGE", {
+              playbackRate: lastSyncedHostState.playbackRate
+            })
+          }
           break
       }
     }
@@ -981,6 +1218,9 @@ export default defineUnlistedScript(async () => {
         case MESSAGE_TYPE.EXIT:
           isExitingRoom = true
           clearPlaybackGestureListeners()
+          disableControlLock()
+          lastSyncedHostState = null
+          console.log("[couch-control-lock] EXIT: control lock cleared")
           for (const event of Object.values(VIDEO_EVENTS)) {
             boundVideo?.removeEventListener(event, checkVideoEvent)
           }

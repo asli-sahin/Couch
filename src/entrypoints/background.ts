@@ -116,7 +116,6 @@ async function setPersistentDebugShield(
         matches: [origin],
         runAt: "document_start",
         allFrames: true,
-        matchAboutBlank: true,
         matchOriginAsFallback: true,
         world: "MAIN",
         persistAcrossSessions: true
@@ -160,8 +159,9 @@ export default defineBackground(async () => {
     }
   }
 
-  browser.runtime.onMessage.addListener((message) => {
-    if (message.action === "getPosthogDistinctId") {
+  browser.runtime.onMessage.addListener((message: unknown) => {
+    const msg = message as Record<string, unknown>
+    if (msg.action === "getPosthogDistinctId") {
       return getSharedDistinctId("background")
     }
 
@@ -1065,13 +1065,15 @@ export default defineBackground(async () => {
   }
 
   // Central message router
-  browser.runtime.onMessage.addListener((message, sender) => {
-    switch (message.action) {
+  browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime.MessageSender) => {
+    // Cast once here; individual cases narrow further as needed
+    const msg = message as Record<string, any>
+    switch (msg.action) {
       case "getTabId":
         return sender.tab?.id ?? handleGetTabId()
       case "getTabUrl": {
         const requestedTabId =
-          typeof message.tabId === "number" ? message.tabId : sender.tab?.id
+          typeof msg.tabId === "number" ? msg.tabId : sender.tab?.id
         if (!requestedTabId) return sender.tab?.url
         return browser.tabs
           .get(requestedTabId)
@@ -1083,7 +1085,7 @@ export default defineBackground(async () => {
       case "shouldInject":
         return handleShouldInject(sender.tab?.id)
       case "inject":
-        return handleInject(message.body)
+        return handleInject(msg.body)
       case "debugDetectVideos":
         return handleDebugDetectVideos(sender.tab?.id)
       case "enableDebugShield":
@@ -1091,15 +1093,15 @@ export default defineBackground(async () => {
       case "disableDebugShield":
         return handleSetDebugShield(false, sender.tab?.id)
       case "showToast":
-        return handleShowToast(message.body, sender.tab?.id)
+        return handleShowToast(msg.body, sender.tab?.id)
       case "trackChatTelemetry":
         return handleOverlayTelemetry(
-          { ...message.body, surface: "overlay" },
+          { ...msg.body, surface: "overlay" },
           sender
         )
       case "trackReactionTelemetry":
         return handleOverlayTelemetry(
-          { ...message.body, surface: "emoji_bar" },
+          { ...msg.body, surface: "emoji_bar" },
           sender
         )
       case "chatMessage": {
@@ -1108,7 +1110,7 @@ export default defineBackground(async () => {
         if (chatTabId) {
           browser.tabs.sendMessage(chatTabId, {
             type: MESSAGE_TYPE.CHAT,
-            text: message.body.text
+            text: msg.body.text
           })
         }
         return Promise.resolve(null)
@@ -1119,7 +1121,7 @@ export default defineBackground(async () => {
         if (reactionTabId) {
           browser.tabs.sendMessage(reactionTabId, {
             type: MESSAGE_TYPE.REACTION,
-            emoji: message.body.emoji
+            emoji: msg.body.emoji
           })
         }
         return Promise.resolve(null)
@@ -1131,10 +1133,10 @@ export default defineBackground(async () => {
           browser.tabs.sendMessage(fwdChatTabId, {
             to: "chat",
             type: "incoming",
-            nickname: message.nickname,
-            text: message.text,
-            timestamp: message.timestamp,
-            self: message.self
+            nickname: msg.nickname,
+            text: msg.text,
+            timestamp: msg.timestamp,
+            self: msg.self
           })
         }
         return Promise.resolve(null)
@@ -1145,8 +1147,8 @@ export default defineBackground(async () => {
         if (fwdReactionTabId) {
           browser.tabs.sendMessage(fwdReactionTabId, {
             to: "reaction",
-            emoji: message.emoji,
-            nickname: message.nickname
+            emoji: msg.emoji,
+            nickname: msg.nickname
           })
         }
         return Promise.resolve(null)
