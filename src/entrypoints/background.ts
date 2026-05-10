@@ -449,9 +449,10 @@ export default defineBackground(async () => {
   }
 
   async function handleGetTabId(): Promise<number> {
+    // currentWindow is unreliable from a service worker (no window context); use lastFocusedWindow instead
     const tabs = await browser.tabs.query({
       active: true,
-      currentWindow: true
+      lastFocusedWindow: true
     })
     if (tabs.length === 0) throw new Error("No active tab found")
     return tabs[0].id as number
@@ -1071,7 +1072,7 @@ export default defineBackground(async () => {
     const msg = message as Record<string, any>
     switch (msg.action) {
       case "getTabId":
-        return sender.tab?.id ?? handleGetTabId()
+        return Promise.resolve(sender.tab?.id ?? handleGetTabId())
       case "getTabState": {
         const tabId = sender.tab?.id
         if (!tabId) return Promise.resolve(null)

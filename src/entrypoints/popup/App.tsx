@@ -101,6 +101,7 @@ function App() {
       ? ({ ...(storageResult.state as State) } as State)
       : undefined
 
+    console.log("[couch-debug] loadPopupState: tabId=", tabId, "tabState=", nextState?.[tabId], "videoFound=", nextState?.[tabId]?.videoFound)
     setCurrentTab(tabId)
     if (nicknameResult.nickname) {
       setNickname(nicknameResult.nickname as string)
@@ -125,6 +126,7 @@ function App() {
     ) => {
       if (areaName !== "local" || !changes.state) return
       const nextState = changes.state.newValue as State | undefined
+      console.log("[couch-debug] storage.onChanged: currentTab=", currentTab, "new tabState=", nextState?.[currentTab], "videoFound=", nextState?.[currentTab]?.videoFound)
       logRoomDebug("hydrate.storage.onChanged", {
         stateSnapshot: nextState ? { ...nextState } : undefined,
         extra: {
@@ -291,13 +293,14 @@ function App() {
     [createOrJoinRoom, handleSubmit, requestRoomPermission]
   )
 
+  // Derive video-not-found directly from state so it's always in sync
+  // and never races with responseCallback's setError(false).
+  const videoNotFound = !!(state?.[currentTab] && !state[currentTab].videoFound)
+  console.log("[couch-debug] render: currentTab=", currentTab, "inRoom=", inRoom, "videoNotFound=", videoNotFound, "tabState=", state?.[currentTab])
+
   useEffect(() => {
     if (state && state[currentTab]) {
       setInRoom(true)
-      if (!state[currentTab].videoFound) {
-        setError(true)
-        setErrorMessage(t("videoNotDetectedYet"))
-      }
     } else {
       setInRoom(false)
     }
@@ -545,7 +548,12 @@ function App() {
               </div>
             )}
 
-            {error && (
+            {videoNotFound && (
+              <div className="animate-fade-in-up stagger-2 mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-xs text-destructive">
+                {t("videoNotDetectedYet")}
+              </div>
+            )}
+            {error && !videoNotFound && (
               <div className="animate-fade-in-up stagger-2 mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-xs text-destructive">
                 {errorMessage}
               </div>
@@ -553,7 +561,7 @@ function App() {
 
             {/* Action buttons */}
             <div className="animate-fade-in-up stagger-3 mt-auto flex flex-col gap-2">
-              {(error || (state && !error)) && (
+              {(error || videoNotFound || (state && !error)) && (
                 <Button
                 variant="outline"
                 size="sm"

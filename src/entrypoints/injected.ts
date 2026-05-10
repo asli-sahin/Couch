@@ -730,6 +730,11 @@ export default defineUnlistedScript(async () => {
       action: "getTabId"
     })
     tabId = tabIdResult as number
+    if (!tabId) {
+      console.error("[couch-debug] init: getTabId returned undefined — aborting init. tabIdResult=", tabIdResult)
+      return { status: MESSAGE_STATUS.ERROR, message: "Could not determine tab ID." }
+    }
+    console.log("[couch-debug] init: tabId resolved =", tabId)
     const storageResult = await browser.storage.local.get("state")
     const savedState = storageResult.state as State | undefined
 
@@ -891,10 +896,19 @@ export default defineUnlistedScript(async () => {
 
     if (video != null) {
       videoNotFoundToastShown = false
+      console.log("[couch-debug] getVideo: video found, tabId=", tabId, "roomCode=", roomCode, "writing videoFound:true")
       updateTabState({
         roomId: roomCode,
         videoFound: true
+      }).then(() => {
+        console.log("[couch-debug] getVideo: updateTabState({videoFound:true}) write DONE for tabId=", tabId)
+        // Verify it actually landed in storage
+        browser.storage.local.get("state").then((r) => {
+          const s = (r.state as Record<number, {videoFound?: boolean}> | undefined)?.[tabId]
+          console.log("[couch-debug] getVideo: storage verify tabId=", tabId, "videoFound=", s?.videoFound, "full tabState=", s)
+        }).catch(() => {})
       }).catch((error) => {
+        console.error("[couch-debug] getVideo: updateTabState FAILED", error)
         posthog.captureException(error as Error)
       })
       if (boundVideo) {
