@@ -305,10 +305,17 @@ Sends message to background via browser.runtime.sendMessage
                   ↓
 Background forwards to injected script
                   ↓
-Injected script emits to socket → Server broadcasts
+Injected script emits to socket → Server broadcasts to OTHER participants only
+                  ↓               (socket.broadcast.to, not io.to — excludes sender)
+Injected script also echoes back to own chat UI (self: true) immediately
                   ↓
 Other participants receive → Background forwards to runtime/chat.tsx
 ```
+
+**Key invariants**:
+- The server uses `socket.broadcast.to(roomId)` for `chatMessage` and `reaction` events — the sender is excluded from the broadcast and relies solely on the local echo.
+- The sender's echo is sent via `forwardToChat` with `self: true`, which renders it on the right side of the chat UI.
+- Keyboard events are fully contained within the chat Shadow DOM. The chat window container calls `e.stopPropagation()` on `keydown`/`keyup`, preventing events from crossing the shadow boundary and triggering site-level (e.g. YouTube) keyboard shortcuts while the user types.
 
 ## Development Workflow
 
@@ -520,6 +527,14 @@ const DEBUG_INJECT_FLOW = true // in background.ts
 **Cause**: Not using synthetic event flags
 **Solution**: Always set `syntheticEvent = true` before programmatic actions
 
+### Issue: Chat sender sees their own message twice
+**Cause**: `io.to(roomId).emit("chatMessage", ...)` broadcasts back to the sender, who already has a local echo.
+**Solution**: Use `socket.broadcast.to(roomId).emit(...)` in `server/index.js` to exclude the sender. Same applies to reactions.
+
+### Issue: Typing in chat triggers video keyboard shortcuts (e.g. YouTube)
+**Cause**: Keyboard events inside the chat Shadow DOM bubble across the shadow boundary into the light DOM, where site-level handlers intercept them.
+**Solution**: The chat window container in `runtime/chat.tsx` calls `e.stopPropagation()` on `onKeyDown` and `onKeyUp`, stopping events inside the shadow DOM from escaping to the page. The textarea's own `onKeyDown` also calls `stopPropagation()` before handling Enter. Note: `injected.ts` also has an `isTypingTarget(e)` guard (using `e.composedPath()[0]`) on its own keydown handlers, but that alone is insufficient since it only covers the extension's handlers, not the host site's.
+
 ### Issue: Extension reloads lose state
 **Cause**: Extension state not persisted across extension reloads
 **Solution**: This is intentional; state cleared on `runtime.onInstalled` with version change
@@ -620,6 +635,6 @@ Ten new `SOCKET_EVENTS` enum entries and payload types: `VoiceOfferPayload`, `Vo
 
 ---
 
-**Last Updated**: 2026-05-10 (voice chat feature — WebRTC peer-to-peer audio)
+**Last Updated**: 2026-05-10 (chat bug fixes — double message echo, keyboard event leakage)
 **Project Version**: 0.5.0
 **Maintained by**: andrea
