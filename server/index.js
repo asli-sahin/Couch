@@ -294,11 +294,11 @@ io.on("connection", (socket) => {
         text: message.text
       })
     }
-    io.to(roomId).emit("chatMessage", message)
+    socket.broadcast.to(roomId).emit("chatMessage", message)
   })
 
   socket.on("reaction", (roomId, data) => {
-    io.to(roomId).emit("reaction", data)
+    socket.broadcast.to(roomId).emit("reaction", data)
   })
 
   // ----- Voice chat signaling -----
