@@ -128,6 +128,17 @@ export default defineUnlistedScript(async () => {
   // ----- Control lock: blocks mouse/touch via overlay + keyboard shortcuts -----
 
   /**
+   * Returns true when the keyboard event originates from a text input field.
+   * Uses composedPath() to pierce Shadow DOM boundaries (e.g. the chat textarea).
+   */
+  const isTypingTarget = (e: KeyboardEvent): boolean => {
+    const target = (e.composedPath()[0] ?? e.target) as HTMLElement | null
+    if (!target) return false
+    const tag = target.tagName
+    return tag === "INPUT" || tag === "TEXTAREA" || !!target.isContentEditable
+  }
+
+  /**
    * Keys that affect playback position or play/pause state.
    * These are intercepted at the window capture phase so the site never
    * receives them when a non-host is in host-only control mode.
@@ -216,6 +227,7 @@ export default defineUnlistedScript(async () => {
 
     if (!controlLockKeyboardHandler) {
       controlLockKeyboardHandler = (e: KeyboardEvent) => {
+        if (isTypingTarget(e)) return
         if (BLOCKED_MEDIA_KEYS.has(e.key)) {
           e.preventDefault()
           e.stopImmediatePropagation()
@@ -283,7 +295,8 @@ export default defineUnlistedScript(async () => {
         }
       })
 
-      const onGesture = () => {
+      const onGesture = (e: Event) => {
+        if (e instanceof KeyboardEvent && isTypingTarget(e)) return
         clearPlaybackGestureListeners()
         void (async () => {
           media.muted = preferredMuted
@@ -304,7 +317,8 @@ export default defineUnlistedScript(async () => {
     } catch {
       media.muted = preferredMuted
 
-      const onGestureOnce = () => {
+      const onGestureOnce = (e: Event) => {
+        if (e instanceof KeyboardEvent && isTypingTarget(e)) return
         clearPlaybackGestureListeners()
         suppressOutboundEvents()
         void media.play()
