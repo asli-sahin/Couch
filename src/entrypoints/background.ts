@@ -14,7 +14,8 @@ const TOP_FRAME_SUPPORT_SCRIPTS = [
   "reactions.js",
   "toast.js",
   "videoPlayer.js",
-  "videoSelector.js"
+  "videoSelector.js",
+  "voice.js"
 ]
 
 const ALL_FRAME_SUPPORT_SCRIPTS = ["autoInject.js"]
@@ -1071,6 +1072,14 @@ export default defineBackground(async () => {
     switch (msg.action) {
       case "getTabId":
         return sender.tab?.id ?? handleGetTabId()
+      case "getTabState": {
+        const tabId = sender.tab?.id
+        if (!tabId) return Promise.resolve(null)
+        return browser.storage.local.get("state").then((result) => {
+          const state = result.state as State | undefined
+          return state?.[tabId] ?? null
+        })
+      }
       case "getTabUrl": {
         const requestedTabId =
           typeof msg.tabId === "number" ? msg.tabId : sender.tab?.id

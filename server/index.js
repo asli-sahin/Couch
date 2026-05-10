@@ -16,6 +16,12 @@ const MAX_ROOM_PARTICIPANTS = 10
  * }>} */
 const rooms = new Map()
 
+/** @type {Map<string, {
+ *   participants: Set<string>,
+ *   sockets: Map<string, string>
+ * }>} */
+const voiceRooms = new Map()
+
 function applyCorsHeaders(res, req) {
   const origin = req.headers.origin || "*"
   res.setHeader("access-control-allow-origin", origin)
@@ -295,6 +301,86 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("reaction", data)
   })
 
+  // ----- Voice chat signaling -----
+
+  socket.on("voiceConnect", ({ roomId, participantId }) => {
+    if (!roomId || !participantId) return
+    if (!voiceRooms.has(roomId)) {
+      voiceRooms.set(roomId, { participants: new Set(), sockets: new Map() })
+    }
+    const vr = voiceRooms.get(roomId)
+    vr.sockets.set(participantId, socket.id)
+    socket.data.voiceRoomId = roomId
+    socket.data.voiceParticipantId = participantId
+    socket.join(`voice:${roomId}`)
+    log("voice.connect", { socketId: socket.id, roomId, participantId })
+  })
+
+  socket.on("voiceJoin", (roomId, participantId) => {
+    const vr = voiceRooms.get(roomId)
+    if (!vr) return
+    vr.participants.add(participantId)
+    log("voice.join", { socketId: socket.id, roomId, participantId, count: vr.participants.size })
+    // Notify existing voice participants so they can send offers to the new joiner
+    socket.to(`voice:${roomId}`).emit("voicePeerJoined", { participantId })
+    // Send current voice participant list back to the joiner
+    socket.emit("voiceStateUpdated", { voiceParticipants: Array.from(vr.participants) })
+  })
+
+  socket.on("voiceLeave", (roomId, participantId) => {
+    const vr = voiceRooms.get(roomId)
+    if (!vr) return
+    vr.participants.delete(participantId)
+    vr.sockets.delete(participantId)
+    log("voice.leave", { socketId: socket.id, roomId, participantId, count: vr.participants.size })
+    io.to(`voice:${roomId}`).emit("voicePeerLeft", { participantId })
+    if (vr.participants.size === 0 && vr.sockets.size === 0) {
+      voiceRooms.delete(roomId)
+    }
+  })
+
+  socket.on("voiceOffer", (roomId, targetParticipantId, sdp) => {
+    const vr = voiceRooms.get(roomId)
+    if (!vr) return
+    const targetSocketId = vr.sockets.get(targetParticipantId)
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("voiceOffer", {
+        fromParticipantId: socket.data.voiceParticipantId,
+        sdp
+      })
+    }
+  })
+
+  socket.on("voiceAnswer", (roomId, targetParticipantId, sdp) => {
+    const vr = voiceRooms.get(roomId)
+    if (!vr) return
+    const targetSocketId = vr.sockets.get(targetParticipantId)
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("voiceAnswer", {
+        fromParticipantId: socket.data.voiceParticipantId,
+        sdp
+      })
+    }
+  })
+
+  socket.on("voiceIceCandidate", (roomId, targetParticipantId, candidate) => {
+    const vr = voiceRooms.get(roomId)
+    if (!vr) return
+    const targetSocketId = vr.sockets.get(targetParticipantId)
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("voiceIceCandidate", {
+        fromParticipantId: socket.data.voiceParticipantId,
+        candidate
+      })
+    }
+  })
+
+  socket.on("voiceMuteToggle", (roomId, muted) => {
+    const participantId = socket.data.voiceParticipantId
+    if (!participantId) return
+    socket.to(`voice:${roomId}`).emit("voiceMuteToggle", { participantId, muted })
+  })
+
   socket.on("syncPing", (payload) => {
     socket.emit("syncPong", {
       clientSendTs: payload?.clientSendTs,
@@ -303,6 +389,22 @@ io.on("connection", (socket) => {
   })
 
   socket.on("disconnect", () => {
+    // Clean up voice room membership
+    const voiceRoomId = socket.data.voiceRoomId
+    const voiceParticipantId = socket.data.voiceParticipantId
+    if (voiceRoomId && voiceParticipantId) {
+      const vr = voiceRooms.get(voiceRoomId)
+      if (vr) {
+        vr.participants.delete(voiceParticipantId)
+        vr.sockets.delete(voiceParticipantId)
+        if (vr.participants.size === 0 && vr.sockets.size === 0) {
+          voiceRooms.delete(voiceRoomId)
+        } else {
+          io.to(`voice:${voiceRoomId}`).emit("voicePeerLeft", { participantId: voiceParticipantId })
+        }
+      }
+    }
+
     const roomId = socket.data.roomId
     const participantId = socket.data.participantId
     if (!roomId || !participantId) return

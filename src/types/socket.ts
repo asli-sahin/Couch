@@ -51,5 +51,48 @@ export enum SOCKET_EVENTS {
   SYNC_PONG = "syncPong",
   ROOM_JOINED = "roomJoined",
   ROOM_UPDATED = "roomUpdated",
-  ROOM_ERROR = "roomError"
+  ROOM_ERROR = "roomError",
+  // Voice chat signaling
+  VOICE_CONNECT = "voiceConnect",
+  VOICE_JOIN = "voiceJoin",
+  VOICE_LEAVE = "voiceLeave",
+  VOICE_OFFER = "voiceOffer",
+  VOICE_ANSWER = "voiceAnswer",
+  VOICE_ICE_CANDIDATE = "voiceIceCandidate",
+  VOICE_MUTE_TOGGLE = "voiceMuteToggle",
+  VOICE_STATE_UPDATED = "voiceStateUpdated",
+  VOICE_PEER_JOINED = "voicePeerJoined",
+  VOICE_PEER_LEFT = "voicePeerLeft"
+}
+
+export type VoiceOfferPayload = {
+  fromParticipantId: string
+  sdp: RTCSessionDescriptionInit
+}
+
+export type VoiceAnswerPayload = {
+  fromParticipantId: string
+  sdp: RTCSessionDescriptionInit
+}
+
+export type VoiceIceCandidatePayload = {
+  fromParticipantId: string
+  candidate: RTCIceCandidateInit
+}
+
+export type VoiceMutePayload = {
+  participantId: string
+  muted: boolean
+}
+
+export type VoicePeerJoinedPayload = {
+  participantId: string
+}
+
+export type VoicePeerLeftPayload = {
+  participantId: string
+}
+
+export type VoiceStateUpdatedPayload = {
+  voiceParticipants: string[]
 }
