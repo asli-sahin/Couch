@@ -498,9 +498,9 @@ const DEBUG_INJECT_FLOW = true // in background.ts
 - Improve mobile browser support
 - Add video quality sync
 - Implement seek-while-playing sync (currently only on seeked event)
-- Add voice chat capability
 - Improve error handling and recovery
 - Add rate limiting to prevent abuse
+- Add TURN server support for voice chat (for users behind strict NAT/firewalls)
 
 ## Common Issues & Solutions
 
@@ -526,23 +526,100 @@ const DEBUG_INJECT_FLOW = true // in background.ts
 
 ---
 
+## Voice Chat
+
+### Overview
+Peer-to-peer voice chat using **WebRTC** (100% free, no third-party service). Audio streams flow directly between users' browsers — the server only relays tiny signaling messages (SDP offers/answers and ICE candidates). Free Google STUN servers handle NAT traversal.
+
+**Topology**: Full mesh — each participant connects directly to every other participant. Works well for up to 10 users (the room's existing limit).
+
+### Architecture
+
+```
+User A (voice.ts) ←── direct WebRTC audio ──→ User B (voice.ts)
+        ↑                                              ↑
+        └──── signaling via Socket.io server ──────────┘
+              (voiceOffer / voiceAnswer / ICE candidates)
+```
+
+### New Files
+- **`src/entrypoints/voice.ts`** — Unlisted script entrypoint, calls `initVoice()` (same pattern as `chat.ts`)
+- **`src/runtime/voice.tsx`** — Full React component + WebRTC engine:
+  - Draggable floating microphone bubble (bottom-left by default, position saved in `voiceBubblePos` storage key)
+  - `RTCPeerConnection` pool (one per remote participant)
+  - `getUserMedia` for microphone access
+  - Voice Activity Detection (VAD) via `AudioContext` + `AnalyserNode` — highlights speaking participants with a green glow ring
+  - Mute/unmute (disables mic track, notifies peers via `voiceMuteToggle`)
+  - Volume slider (controls `audio.volume` on all incoming `<audio>` elements)
+  - ICE candidate buffering for correct ordering before `setRemoteDescription`
+  - `pc.restartIce()` on ICE failure
+
+### Server Changes (`server/index.js`)
+A separate `voiceRooms` map tracks voice participants independently from the main `rooms` map:
+```javascript
+voiceRooms: Map<roomId, { participants: Set<participantId>, sockets: Map<participantId, socketId> }>
+```
+
+New socket events (all on the voice socket, separate from the injected.ts video sync socket):
+
+| Event | Direction | Purpose |
+|---|---|---|
+| `voiceConnect` | client → server | Register voice socket; server joins it to `voice:{roomId}` |
+| `voiceJoin` | client → server | Enter voice chat; server notifies existing participants |
+| `voiceLeave` | client → server | Leave voice chat |
+| `voiceOffer` | client → server → target | WebRTC SDP offer relayed by participantId |
+| `voiceAnswer` | client → server → target | WebRTC SDP answer relayed by participantId |
+| `voiceIceCandidate` | client → server → target | ICE candidate relayed by participantId |
+| `voiceMuteToggle` | client → server → room | Broadcast mute/unmute state |
+| `voicePeerJoined` | server → room | New participant joined voice (existing peers initiate offers) |
+| `voicePeerLeft` | server → room | Participant left voice |
+| `voiceStateUpdated` | server → joiner | Current voice participant list sent to newly joined user |
+
+### Signaling Flow (Offer/Answer)
+When participant B joins voice:
+1. B emits `voiceConnect` (registers socket) + `voiceJoin`
+2. Server emits `voicePeerJoined { participantId: B }` to all existing voice participants (A, C, ...)
+3. A and C each create an `RTCPeerConnection` for B and send a `voiceOffer`
+4. B receives the offers, creates answers, sends `voiceAnswer` back
+5. ICE candidates are exchanged in parallel
+6. Audio streams directly peer-to-peer
+
+### Background Script Changes (`background.ts`)
+- `"voice.js"` added to `TOP_FRAME_SUPPORT_SCRIPTS` (injected alongside chat, reactions, etc.)
+- New `getTabState` message action: returns `TabState` for the current tab's sender, used by `voice.tsx` to read `roomId`, `participantId`, `nickname`, and `participants`
+
+### Types (`src/types/socket.ts`)
+Ten new `SOCKET_EVENTS` enum entries and payload types: `VoiceOfferPayload`, `VoiceAnswerPayload`, `VoiceIceCandidatePayload`, `VoiceMutePayload`, `VoicePeerJoinedPayload`, `VoicePeerLeftPayload`, `VoiceStateUpdatedPayload`.
+
+### Key Implementation Notes
+- Voice socket is **separate** from the injected.ts video-sync socket — clean separation of concerns
+- Audio elements (`<audio>`) are appended directly to `document.body` (not the Shadow DOM) with `autoplay = true` — required for browser autoplay policy to allow playback
+- `AudioContext` is created/resumed inside the join button click handler (inside the user gesture) to avoid the suspended-context restriction
+- VAD uses `AnalyserNode.getByteFrequencyData()` with hysteresis thresholds (28 to start speaking, 14 to stop) to avoid rapid flickering
+- No manifest permissions required — `getUserMedia` in a content script uses the page's permission context (browser prompts user naturally)
+- **Deployment note**: Server changes must be deployed alongside extension builds. Deployed server must be updated for voice signaling to work.
+
+---
+
 ## Quick Reference: File → Purpose
 
 | File | Purpose |
 |------|---------|
-| `server/index.js` | Room server (Socket.io + HTTP) |
+| `server/index.js` | Room server (Socket.io + HTTP) + voice signaling relay |
 | `src/entrypoints/background.ts` | Background service worker, message router |
 | `src/entrypoints/injected.ts` | Core sync engine (video event capture/apply) |
+| `src/entrypoints/voice.ts` | Voice chat entrypoint (calls initVoice) |
 | `src/entrypoints/popup/App.tsx` | Extension popup UI |
 | `src/entrypoints/options/App.tsx` | Settings page UI |
 | `src/runtime/chat.tsx` | Chat overlay component |
 | `src/runtime/reactions.tsx` | Emoji reactions component |
-| `src/types/socket.ts` | Socket event types |
+| `src/runtime/voice.tsx` | Voice chat UI + WebRTC engine |
+| `src/types/socket.ts` | Socket event types (incl. voice events) |
 | `src/types/state.ts` | Extension state schema |
 | `wxt.config.ts` | Extension build configuration |
 
 ---
 
-**Last Updated**: 2026-05-10 (control lock feature + "Allow control" rename)
+**Last Updated**: 2026-05-10 (voice chat feature — WebRTC peer-to-peer audio)
 **Project Version**: 0.5.0
 **Maintained by**: andrea
