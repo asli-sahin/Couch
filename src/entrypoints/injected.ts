@@ -16,7 +16,6 @@ import { findSiteVideo, detectStreamingSite, getSiteConfig } from "~/lib/video-d
 import { debugRoomLog } from "~/lib/debug"
 import browser from "webextension-polyfill"
 import { io } from "socket.io-client"
-import { createPostHog } from "~/lib/posthog"
 
 declare global {
   interface Window {
@@ -28,7 +27,6 @@ export default defineUnlistedScript(async () => {
   if (window.__synclifyInjected) return
   window.__synclifyInjected = true
 
-  const posthog = await createPostHog("injected")
   const TRACKED_MULTI_PARTICIPANT_ROOMS_STORAGE_KEY =
     "tracked_multi_participant_rooms"
   const MAX_TRACKED_MULTI_PARTICIPANT_ROOMS = 200
@@ -278,7 +276,7 @@ export default defineUnlistedScript(async () => {
     } catch (e: unknown) {
       const err = e as { name?: string }
       if (err?.name !== "NotAllowedError") {
-        posthog.captureException(e instanceof Error ? e : new Error(String(e)))
+        console.error(e)
         return
       }
     }
@@ -412,13 +410,6 @@ export default defineUnlistedScript(async () => {
       : []
 
     if (trackedRooms.includes(trackingKey)) return
-
-    posthog.capture("room_more_than_two_participants", {
-      roomId: nextRoomState.roomId,
-      participantCount: nextRoomState.participantCount,
-      controlMode: nextRoomState.controlMode,
-      isHost: nextRoomState.hostId === participantId
-    })
 
     await browser.storage.local.set({
       [TRACKED_MULTI_PARTICIPANT_ROOMS_STORAGE_KEY]: [
@@ -888,10 +879,6 @@ export default defineUnlistedScript(async () => {
     // Final fallback: first video on the page
     if (!video) {
       video = document.querySelector("video")
-      posthog.capture("video_id_null_fallback", {
-        message:
-          "videoId is null, using first element returned by document.querySelector"
-      })
     }
 
     if (video != null) {
@@ -909,7 +896,6 @@ export default defineUnlistedScript(async () => {
         }).catch(() => {})
       }).catch((error) => {
         console.error("[couch-debug] getVideo: updateTabState FAILED", error)
-        posthog.captureException(error as Error)
       })
       if (boundVideo) {
         for (const event of Object.values(VIDEO_EVENTS)) {
@@ -939,9 +925,6 @@ export default defineUnlistedScript(async () => {
       return { status: MESSAGE_STATUS.SUCCESS }
     }
     observer.observe(document, { subtree: true, childList: true })
-    posthog.capture("no_video_found_pending_observer", {
-      message: `No video element yet — observing DOM in ${window.location.href}`
-    })
     // Room join already succeeded — return SUCCESS so the popup does NOT roll back storage
     // while the MutationObserver attaches to the player (common on slow-mount sites).
     return { status: MESSAGE_STATUS.SUCCESS }
@@ -983,9 +966,7 @@ export default defineUnlistedScript(async () => {
       return pendingJoinPromise
     }
     if (!roomCode) {
-      const e = new Error("Invalid room code: " + roomCode)
-      posthog.captureException(e)
-      throw e
+      throw new Error("Invalid room code: " + roomCode)
     }
     await ensureSocketConnected()
 
@@ -1103,14 +1084,13 @@ export default defineUnlistedScript(async () => {
       !connectRequestedByJoin
     ) {
       joinRoom().catch((error) => {
-        posthog.captureException(error as Error)
+        console.error(error)
       })
     }
   })
 
   socket.on(SOCKET_EVENTS.FULL, (room) => {
-    const e = new Error("Room is full: " + room)
-    posthog.captureException(e)
+    console.error("Room is full: " + room)
   })
 
   socket.on(SOCKET_EVENTS.ROOM_UPDATED, (nextRoomState: RoomState) => {
@@ -1130,7 +1110,7 @@ export default defineUnlistedScript(async () => {
       }
     })
     applyRoomState(nextRoomState).catch((error) => {
-      posthog.captureException(error as Error)
+      console.error(error)
     })
 
     if (
@@ -1143,9 +1123,6 @@ export default defineUnlistedScript(async () => {
   })
 
   socket.on("connect_error", () => {
-    posthog.capture("socket_connection_error", {
-      message: "Socket connection error, allowing polling"
-    })
     socket.io.opts.transports = ["polling", "websocket"]
   })
 
@@ -1225,10 +1202,6 @@ export default defineUnlistedScript(async () => {
       serverTimestamp?: number
     ) => {
       if (video == null) {
-        posthog.capture("socket_video_event_no_element", {
-          eventType,
-          note: "No video bound yet — likely early remote event."
-        })
         return
       }
       const shouldTrackTimelineEvent =
@@ -1317,14 +1290,12 @@ export default defineUnlistedScript(async () => {
     }
   )
 
-  browser.runtime.onMessage.addListener(
-    (
-      request: ExtMessage & {
-        type: MESSAGE_TYPE
-        text?: string
-        emoji?: string
-      }
-    ) => {
+  browser.runtime.onMessage.addListener((message: unknown) => {
+    const request = message as ExtMessage & {
+      type: MESSAGE_TYPE
+      text?: string
+      emoji?: string
+    }
       switch (request.type) {
         case MESSAGE_TYPE.INIT: {
           return init(

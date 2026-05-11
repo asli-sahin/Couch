@@ -17,7 +17,6 @@ import { useForm } from "react-hook-form"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import { Switch } from "~/components/ui/switch"
-import { usePostHog } from "@posthog/react"
 import { debugRoomLog } from "~/lib/debug"
 import { t } from "~/lib/i18n"
 import type { ControlMode } from "~/types/socket"
@@ -28,7 +27,6 @@ type FormData = {
 }
 
 function App() {
-  const posthog = usePostHog()
   const [state, setState] = useState<State | undefined>()
   const [inRoom, setInRoom] = useState(false)
   const [error, setError] = useState(false)
@@ -339,25 +337,14 @@ function App() {
     setTooltipText(t("copied"))
   }, [getRoom])
 
-  const submitReport = useCallback(async () => {
-    const tabs = await browser.tabs.query({
-      active: true,
-      currentWindow: true
-    })
-    const url = tabs[0]?.url || "unknown"
-    posthog.capture("website_reported", {
-      reported_url: url,
-      details: reportDetails.trim(),
-      page_title: tabs[0]?.title || "",
-      extension_version: browser.runtime.getManifest().version
-    })
+  const submitReport = useCallback(() => {
     setReportSent(true)
     setReportDetails("")
     setTimeout(() => {
       setReportSent(false)
       setReportOpen(false)
     }, 2000)
-  }, [posthog, reportDetails])
+  }, [reportDetails])
 
   return (
     <div className="dark relative flex min-h-[320px] flex-col bg-background">

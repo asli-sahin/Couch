@@ -4,10 +4,6 @@ import { SOCKET_URL, SOCKET_EVENTS, type ControlMode } from "~/types/socket"
 import { MESSAGE_STATUS, MESSAGE_TYPE } from "~/types/messaging"
 import type { MessageKey } from "~/lib/i18n"
 import type { State } from "~/types/state"
-import { createPostHog, getSharedDistinctId } from "~/lib/posthog"
-import type { PostHog } from "posthog-js/dist/module.no-external"
-
-let posthog: PostHog
 
 const TOP_FRAME_SUPPORT_SCRIPTS = [
   "chat.js",
@@ -159,17 +155,6 @@ export default defineBackground(async () => {
       // Best effort only.
     }
   }
-
-  browser.runtime.onMessage.addListener((message: unknown) => {
-    const msg = message as Record<string, unknown>
-    if (msg.action === "getPosthogDistinctId") {
-      return getSharedDistinctId("background")
-    }
-
-    return undefined
-  })
-
-  posthog = await createPostHog("background")
 
   // --- Persistent rooms: re-inject on full page navigation ---
   browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
@@ -634,10 +619,9 @@ export default defineBackground(async () => {
     })
     const code = await res.text()
     if (!res.ok) {
-      const e = new Error(
+      console.error(
         `Failed to fetch room code from socket server: ${JSON.stringify({ code: res.status, statusText: res.statusText, body: code })}`
       )
-      posthog.captureException(e)
     }
     return code
   }
@@ -982,7 +966,6 @@ export default defineBackground(async () => {
       properties.first_interaction = body.firstInteraction
     }
 
-    posthog.capture(body.event, properties)
     return null
   }
 
