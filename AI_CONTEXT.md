@@ -22,7 +22,6 @@
 - **State Management**: Browser extension storage APIs (`browser.storage.local`, `browser.storage.sync`)
 - **Real-time Communication**: Socket.io-client
 - **Forms**: React Hook Form + Zod validation
-- **Analytics**: PostHog
 
 ### Backend (Room Server)
 - **Runtime**: Node.js
@@ -121,7 +120,6 @@ Couch/
 │   │   └── video.ts             # Video event types
 │   ├── lib/                     # Utility libraries
 │   │   ├── debug.ts             # Debug utilities
-│   │   ├── posthog.ts           # Analytics setup
 │   │   ├── i18n.ts              # Internationalization
 │   │   ├── video-detection.ts   # Video detection logic
 │   │   ├── fullscreen.ts        # Fullscreen helpers
@@ -356,7 +354,6 @@ npm run zip
 ### Environment Variables
 
 - `WXT_SOCKET_ENDPOINT` - Backend server URL (default: `http://localhost:3001`)
-- `WXT_PUBLIC_POSTHOG_HOST` - PostHog analytics host
 
 ### Scripts
 
@@ -641,6 +638,6 @@ Ten new `SOCKET_EVENTS` enum entries and payload types: `VoiceOfferPayload`, `Vo
 
 ---
 
-**Last Updated**: 2026-05-10 (chat bug fixes — double message echo, keyboard event leakage; URL sync redirect loop on Cloudflare/challenge pages)
+**Last Updated**: 2026-05-11 (removed PostHog analytics; chat bug fixes — double message echo, keyboard event leakage; URL sync redirect loop on Cloudflare/challenge pages)
 **Project Version**: 0.5.0
 **Maintained by**: andrea
