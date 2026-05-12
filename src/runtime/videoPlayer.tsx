@@ -358,7 +358,7 @@ function PlayerControls({
     setCurrentTime(Number(e.currentTarget.value))
   }, [])
   const onSeekEnd = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: React.SyntheticEvent<HTMLInputElement>) => {
       video.currentTime = Number(e.currentTarget.value)
       setSeeking(false)
     },
@@ -776,7 +776,8 @@ function PlayerManager() {
   wrapperRef.current = wrapper
 
   useEffect(() => {
-    browser.storage.sync.get("settings").then((result) => {
+    browser.storage.sync.get("settings").then((raw) => {
+      const result = raw as { settings?: { showPlayer?: boolean } }
       if (result.settings && typeof result.settings.showPlayer === "boolean") {
         setSettingEnabled(result.settings.showPlayer)
       }
@@ -784,11 +785,11 @@ function PlayerManager() {
     const onChange = (
       changes: Record<string, browser.Storage.StorageChange>
     ) => {
-      if (
-        changes.settings?.newValue &&
-        typeof changes.settings.newValue.showPlayer === "boolean"
-      ) {
-        setSettingEnabled(changes.settings.newValue.showPlayer)
+      const next = changes.settings?.newValue as
+        | { showPlayer?: boolean }
+        | undefined
+      if (next && typeof next.showPlayer === "boolean") {
+        setSettingEnabled(next.showPlayer)
       }
     }
     browser.storage.onChanged.addListener(onChange)
@@ -894,32 +895,37 @@ function PlayerManager() {
   // Listen for video-player messages
   useEffect(() => {
     const handler = (
-      msg: { to?: string; videoId?: string; enable?: boolean },
+      msg: unknown,
       _sender: browser.Runtime.MessageSender,
       sendResponse: (r: unknown) => void
     ) => {
-      if (msg.to === "videoPlayer" && msg.videoId) {
+      const m = msg as { to?: string; videoId?: string; enable?: boolean }
+      if (m.to === "videoPlayer" && m.videoId) {
         if (!enabled || !settingEnabled) {
           sendResponse(null)
           return true
         }
         const el = document.querySelector(
-          `[data-synclify-id="${msg.videoId}"]`
+          `[data-synclify-id="${m.videoId}"]`
         ) as HTMLVideoElement | null
         if (el) attachToVideo(el)
         sendResponse(null)
         return true
       }
-      if (msg.to === "videoPlayerToggle") {
-        const next = msg.enable !== undefined ? msg.enable : !enabled
+      if (m.to === "videoPlayerToggle") {
+        const next = m.enable !== undefined ? m.enable : !enabled
         setEnabled(next)
         if (!next) detach()
         sendResponse(null)
         return true
       }
+      return false
     }
-    browser.runtime.onMessage.addListener(handler)
-    return () => browser.runtime.onMessage.removeListener(handler)
+    browser.runtime.onMessage.addListener(handler as browser.Runtime.OnMessageListener)
+    return () =>
+      browser.runtime.onMessage.removeListener(
+        handler as browser.Runtime.OnMessageListener
+      )
   }, [enabled, settingEnabled, attachToVideo, detach])
 
   // Auto-attach when a video is detected (storage state change)

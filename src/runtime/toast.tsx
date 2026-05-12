@@ -20,35 +20,41 @@ const ToastOverlay = () => {
 
   useEffect(() => {
     const callback = (
-      msg: {
+      msg: unknown,
+      _sender: browser.Runtime.MessageSender,
+      sendResponse: (response: unknown) => void
+    ) => {
+      const m = msg as {
         to: string
         show: boolean
         content: string
         error: boolean
         messageKey?: MessageKey
-      },
-      _sender: browser.Runtime.MessageSender,
-      sendResponse: (response: unknown) => void
-    ) => {
-      if (msg.to === "toast") {
-        const content = msg.messageKey ? t(msg.messageKey) : msg.content
-        if (msg.show) {
+      }
+      if (m.to === "toast") {
+        const content = m.messageKey ? t(m.messageKey) : m.content
+        if (m.show) {
           if (!isFullscreenRef.current) {
             // Use a stable id keyed to the content so repeated identical toasts
             // update the existing one instead of stacking new popups.
-            const id = msg.messageKey ?? content
-            if (msg.error) toast.error(content, { id })
+            const id = m.messageKey ?? content
+            if (m.error) toast.error(content, { id })
             else toast.success(content, { id })
           }
         } else toast.dismiss()
         sendResponse(null)
         return true
       }
+      return false
     }
-    browser.runtime.onMessage.addListener(callback)
+    browser.runtime.onMessage.addListener(
+      callback as browser.Runtime.OnMessageListener
+    )
 
     return () => {
-      browser.runtime.onMessage.removeListener(callback)
+      browser.runtime.onMessage.removeListener(
+        callback as browser.Runtime.OnMessageListener
+      )
     }
   }, [])
 

@@ -218,7 +218,7 @@ function App() {
       })
       await setStoredState(newState)
 
-      const rollbackState = Object.assign({}, newState)
+      const rollbackState: State = Object.assign({}, newState)
       if (previousTabState) {
         rollbackState[currentTab] = previousTabState
       } else {
@@ -236,9 +236,10 @@ function App() {
             controlMode
           }
         })
-        .then(async (response: ExtResponse) => {
-          responseCallback(response)
-          if (!response || response.status !== MESSAGE_STATUS.SUCCESS) {
+        .then(async (response) => {
+          const r = response as ExtResponse
+          responseCallback(r)
+          if (!r || r.status !== MESSAGE_STATUS.SUCCESS) {
             await setStoredState(rollbackState)
           }
         })
@@ -266,7 +267,9 @@ function App() {
       } else {
         browser.runtime
           .sendMessage({ action: "createRoom" })
-          .then((roomCode: string) => roomCallback(roomCode))
+          .then((roomCode) => {
+            if (typeof roomCode === "string") void roomCallback(roomCode)
+          })
       }
     },
     [roomCallback]

@@ -110,7 +110,7 @@ function VoiceApp() {
     const check = () => {
       browser.runtime
         .sendMessage({ action: "shouldInject" })
-        .then((res: boolean) => setVisible(res))
+        .then((res) => setVisible(Boolean(res)))
         .catch(() => {})
     }
     check()

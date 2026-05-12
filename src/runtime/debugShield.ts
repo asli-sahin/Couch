@@ -155,8 +155,8 @@ export function initDebugShield(): void {
     }
   }
 
-  const wrapCookiesApi = (cookies: CookiesApi): CookiesApi => {
-    if (!cookies || typeof cookies !== "object") return cookies
+  const wrapCookiesApi = (cookies: CookiesApi | undefined): CookiesApi => {
+    if (!cookies || typeof cookies !== "object") return {} as CookiesApi
 
     return new Proxy(cookies, {
       get(target, prop, receiver) {
@@ -191,7 +191,9 @@ export function initDebugShield(): void {
     })
   }
 
-  let cookiesApiValue = wrapCookiesApi((window as Window & { Cookies?: CookiesApi }).Cookies)
+  let cookiesApiValue = wrapCookiesApi(
+    (window as Window & { Cookies?: CookiesApi }).Cookies
+  )
   Object.defineProperty(window, "Cookies", {
     configurable: true,
     enumerable: true,
@@ -242,7 +244,7 @@ export function initDebugShield(): void {
   }
 
   const OriginalFunction = window.Function
-  const SafeFunction = function (...args: string[]) {
+  const SafeFunction = function (this: unknown, ...args: string[]) {
     if (args.length > 0) {
       const lastIndex = args.length - 1
       const last = args[lastIndex]
@@ -253,7 +255,11 @@ export function initDebugShield(): void {
 
     return OriginalFunction.apply(this, args)
   } as unknown as FunctionConstructor
-  SafeFunction.prototype = OriginalFunction.prototype
+  Object.defineProperty(SafeFunction, "prototype", {
+    value: OriginalFunction.prototype,
+    writable: true,
+    configurable: true
+  })
   Object.setPrototypeOf(SafeFunction, OriginalFunction)
   window.Function = SafeFunction
 
@@ -275,8 +281,14 @@ export function initDebugShield(): void {
       return original(handler, timeout, ...args)
     }
 
-  window.setTimeout = wrapTimer(window.setTimeout, "timeout")
-  window.setInterval = wrapTimer(window.setInterval, "interval")
+  window.setTimeout = wrapTimer(
+    window.setTimeout,
+    "timeout"
+  ) as typeof window.setTimeout
+  window.setInterval = wrapTimer(
+    window.setInterval,
+    "interval"
+  ) as typeof window.setInterval
 
   const originalRequestAnimationFrame = window.requestAnimationFrame.bind(window)
   window.requestAnimationFrame = (callback) =>
@@ -341,7 +353,7 @@ export function initDebugShield(): void {
       recordBlockedRedirect("script.append", node.src || node.textContent || "")
       return node
     }
-    return originalAppendChild.call(this, node)
+    return originalAppendChild.call(this, node) as T
   }
 
   const originalInsertBefore = Node.prototype.insertBefore
@@ -353,19 +365,19 @@ export function initDebugShield(): void {
       recordBlockedRedirect("script.insertBefore", node.src || node.textContent || "")
       return node
     }
-    return originalInsertBefore.call(this, node, child)
+    return originalInsertBefore.call(this, node, child) as T
   }
 
   const originalReplaceChild = Node.prototype.replaceChild
   Node.prototype.replaceChild = function <T extends Node>(
-    node: T,
-    child: Node
-  ): Node {
+    node: Node,
+    child: T
+  ): T {
     if (state.enabled && isBlockedScript(node)) {
       recordBlockedRedirect("script.replaceChild", node.src || node.textContent || "")
       return child
     }
-    return originalReplaceChild.call(this, node, child)
+    return originalReplaceChild.call(this, node, child) as T
   }
 
   const originalDocumentWrite = document.write.bind(document)
@@ -440,7 +452,10 @@ export function initDebugShield(): void {
     )
   }
 
-  const guard = (kind: string, original: (...args: unknown[]) => unknown) => {
+  const guard = (
+    kind: string,
+    original: (...args: unknown[]) => unknown
+  ): ((...args: unknown[]) => unknown) => {
     return (...args: unknown[]) => {
       if (state.enabled) {
         const firstArg = args[0]
@@ -461,17 +476,22 @@ export function initDebugShield(): void {
   }
 
   if (typeof locationProto.assign === "function") {
-    locationProto.assign = guard("location.assign", locationProto.assign) as (
-      url: string
-    ) => void
+    locationProto.assign = guard(
+      "location.assign",
+      locationProto.assign.bind(window.location) as (...args: unknown[]) => unknown
+    ) as typeof locationProto.assign
   }
   if (typeof locationProto.replace === "function") {
-    locationProto.replace = guard("location.replace", locationProto.replace) as (
-      url: string
-    ) => void
+    locationProto.replace = guard(
+      "location.replace",
+      locationProto.replace.bind(window.location) as (...args: unknown[]) => unknown
+    ) as typeof locationProto.replace
   }
   if (typeof locationProto.reload === "function") {
-    locationProto.reload = guard("location.reload", locationProto.reload) as () => void
+    locationProto.reload = guard(
+      "location.reload",
+      locationProto.reload.bind(window.location) as (...args: unknown[]) => unknown
+    ) as typeof locationProto.reload
   }
 
   const hrefDescriptor = Object.getOwnPropertyDescriptor(locationProto, "href")
@@ -502,25 +522,32 @@ export function initDebugShield(): void {
     })
   }
 
-  history.back = guard("history.back", history.back.bind(history)) as () => void
+  history.back = guard(
+    "history.back",
+    history.back.bind(history) as (...args: unknown[]) => unknown
+  ) as () => void
   history.forward = guard(
     "history.forward",
-    history.forward.bind(history)
+    history.forward.bind(history) as (...args: unknown[]) => unknown
   ) as () => void
-  history.go = guard("history.go", history.go.bind(history)) as (
-    delta?: number
-  ) => void
+  history.go = guard(
+    "history.go",
+    history.go.bind(history) as (...args: unknown[]) => unknown
+  ) as typeof history.go
   history.pushState = guard(
     "history.pushState",
-    history.pushState.bind(history)
+    history.pushState.bind(history) as (...args: unknown[]) => unknown
   ) as typeof history.pushState
   history.replaceState = guard(
     "history.replaceState",
-    history.replaceState.bind(history)
+    history.replaceState.bind(history) as (...args: unknown[]) => unknown
   ) as typeof history.replaceState
 
   const originalOpen = window.open.bind(window)
-  window.open = guard("window.open", originalOpen) as typeof window.open
+  window.open = guard(
+    "window.open",
+    originalOpen as (...args: unknown[]) => unknown
+  ) as typeof window.open
 
   const originalFetch = window.fetch.bind(window)
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {

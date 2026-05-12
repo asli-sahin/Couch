@@ -29,24 +29,27 @@ const VideoSelector = () => {
 
   useEffect(() => {
     const callback = (
-      msg: {
-        to: string
-        videos: VideoElement[]
-      },
+      msg: unknown,
       _sender: browser.Runtime.MessageSender,
       sendResponse: (response: unknown) => void
     ) => {
-      if (msg.to === "videoSelector") {
+      const m = msg as { to: string; videos: VideoElement[] }
+      if (m.to === "videoSelector") {
         setShow(true)
-        setVideos(msg.videos)
+        setVideos(m.videos)
         sendResponse(null)
         return true
       }
+      return false
     }
-    browser.runtime.onMessage.addListener(callback)
+    browser.runtime.onMessage.addListener(
+      callback as browser.Runtime.OnMessageListener
+    )
 
     return () => {
-      browser.runtime.onMessage.removeListener(callback)
+      browser.runtime.onMessage.removeListener(
+        callback as browser.Runtime.OnMessageListener
+      )
     }
   }, [])
 

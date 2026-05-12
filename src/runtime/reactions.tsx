@@ -87,7 +87,7 @@ function ReactionsApp() {
     const check = () => {
       browser.runtime
         .sendMessage({ action: "shouldInject" })
-        .then((res: boolean) => setVisible(res))
+        .then((res) => setVisible(Boolean(res)))
     }
     check()
     const listener = (
@@ -175,18 +175,23 @@ function ReactionsApp() {
   // Listen for incoming reactions
   useEffect(() => {
     const handler = (
-      msg: { to?: string; emoji?: string; nickname?: string },
+      msg: unknown,
       _sender: browser.Runtime.MessageSender,
       sendResponse: (r: unknown) => void
     ) => {
-      if (msg.to === "reaction" && msg.emoji) {
-        spawnEmoji(msg.emoji)
+      const m = msg as { to?: string; emoji?: string; nickname?: string }
+      if (m.to === "reaction" && m.emoji) {
+        spawnEmoji(m.emoji)
         sendResponse(null)
         return true
       }
+      return false
     }
-    browser.runtime.onMessage.addListener(handler)
-    return () => browser.runtime.onMessage.removeListener(handler)
+    browser.runtime.onMessage.addListener(handler as browser.Runtime.OnMessageListener)
+    return () =>
+      browser.runtime.onMessage.removeListener(
+        handler as browser.Runtime.OnMessageListener
+      )
   }, [])
 
   const spawnEmoji = useCallback((emoji: string) => {

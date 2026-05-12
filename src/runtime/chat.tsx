@@ -68,7 +68,7 @@ function ChatApp() {
     const check = () => {
       browser.runtime
         .sendMessage({ action: "shouldInject" })
-        .then((res: boolean) => setVisible(res))
+        .then((res) => setVisible(Boolean(res)))
     }
     check()
     const listener = (
@@ -176,39 +176,40 @@ function ChatApp() {
   // Listen for incoming chat messages
   useEffect(() => {
     const handler = (
-      msg: {
+      msg: unknown,
+      _sender: browser.Runtime.MessageSender,
+      sendResponse: (r: unknown) => void
+    ) => {
+      const m = msg as {
         to?: string
         type?: string
         nickname?: string
         text?: string
         timestamp?: number
         self?: boolean
-      },
-      _sender: browser.Runtime.MessageSender,
-      sendResponse: (r: unknown) => void
-    ) => {
-      if (msg.to === "chat" && msg.type === "incoming") {
+      }
+      if (m.to === "chat" && m.type === "incoming") {
         const chatMsg: ChatMsg = {
-          nickname: msg.nickname || "Anonymous",
-          text: msg.text || "",
-          timestamp: msg.timestamp || Date.now(),
-          self: msg.self
+          nickname: m.nickname || "Anonymous",
+          text: m.text || "",
+          timestamp: m.timestamp || Date.now(),
+          self: m.self
         }
         setMessages((prev) => [...prev, chatMsg])
-        if (!msg.self && !hasTrackedUsage.current) {
+        if (!m.self && !hasTrackedUsage.current) {
           hasTrackedUsage.current = true
           trackChatTelemetry({
             event: "chat_used",
             firstInteraction: "incoming"
           })
         }
-        if (!open && !msg.self) {
+        if (!open && !m.self) {
           setUnread((prev) => prev + 1)
           // In fullscreen, show a temporary toast instead of the unread badge
           if (isFullscreenRef.current) {
             const id = ++toastIdRef.current
-            const nickname = msg.nickname || "Anonymous"
-            const text = msg.text || ""
+            const nickname = m.nickname || "Anonymous"
+            const text = m.text || ""
             setToasts((prev) => [
               ...prev.slice(-(MAX_TOASTS - 1)),
               { id, nickname, text, visible: true }
@@ -226,9 +227,13 @@ function ChatApp() {
         sendResponse(null)
         return true
       }
+      return false
     }
-    browser.runtime.onMessage.addListener(handler)
-    return () => browser.runtime.onMessage.removeListener(handler)
+    browser.runtime.onMessage.addListener(handler as browser.Runtime.OnMessageListener)
+    return () =>
+      browser.runtime.onMessage.removeListener(
+        handler as browser.Runtime.OnMessageListener
+      )
   }, [open, trackChatTelemetry])
 
   // Auto-scroll on new messages

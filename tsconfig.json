@@ -7,5 +7,10 @@
       "~/*": ["./src/*"]
     },
     "baseUrl": "."
-  }
+  },
+  "exclude": [
+    ".output",
+    "src/content-script.ts",
+    "src/options.tsx"
+  ]
 }

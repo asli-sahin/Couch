@@ -1,4 +1,4 @@
-import { MESSAGE_STATUS } from "~/types/messaging"
+import { type ExtResponse, MESSAGE_STATUS } from "~/types/messaging"
 import browser from "webextension-polyfill"
 import { runOnce } from "~/lib/runtime-ui"
 
@@ -24,7 +24,7 @@ export function initAutoInject(): void {
         // Re-check if we should inject (room may still be active for this tab)
         browser.runtime
           .sendMessage({ action: "shouldInject" })
-          .then((res: boolean) => {
+          .then((res) => {
             if (res) {
               shouldInject = true
               triggerInject()
@@ -68,12 +68,12 @@ export function initAutoInject(): void {
 
   browser.runtime
     .sendMessage({ action: "shouldInject" })
-    .then(async (res: boolean) => {
-      shouldInject = res
+    .then(async (res) => {
+      shouldInject = Boolean(res)
       if (shouldInject) {
-        const result = await browser.runtime.sendMessage({
+        const result = (await browser.runtime.sendMessage({
           action: "inject"
-        })
+        })) as ExtResponse | undefined
         if (
           result?.status !== MESSAGE_STATUS.SUCCESS &&
           result?.status !== MESSAGE_STATUS.MULTIPLE_VIDEOS
